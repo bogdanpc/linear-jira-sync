@@ -1,0 +1,32 @@
+{
+  "data": {
+    "issue": {
+      "id": "issue-1",
+      "identifier": "ENG-123",
+      "title": "Test Issue",
+      "description": "Test description",
+      "priority": 2,
+      "state": {
+        "id": "state-1",
+        "name": "In Progress",
+        "type": "started"
+      },
+      "assignee": null,
+      "creator": {
+        "id": "user-1",
+        "name": "Test User",
+        "email": "test@example.com",
+        "displayName": "Test User"
+      },
+      "team": {
+        "id": "team-1",
+        "name": "Engineering",
+        "key": "ENG"
+      },
+      "labels": [],
+      "createdAt": "2024-01-01T10:00:00Z",
+      "updatedAt": "2024-01-02T10:00:00Z",
+      "url": "https://linear.app/test/issue/ENG-123"
+    }
+  }
+}

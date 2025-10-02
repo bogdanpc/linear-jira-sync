@@ -1,0 +1,18 @@
+{
+  "request": {
+    "urlPath": "/jira/rest/api/3/search",
+    "method": "GET",
+    "queryParameters": {
+      "jql": {
+        "contains": "project = TEST"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "bodyFileName": "jira-issues-list.json",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}

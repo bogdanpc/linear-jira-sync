@@ -1,0 +1,19 @@
+{
+  "request": {
+    "url": "/linear/",
+    "method": "POST",
+    "bodyPatterns": [
+      {
+        "contains": "\"key\":{\"eq\":\"ENG\"}"
+      },
+      {
+        "doesNotMatch": "\"type\""
+      }
+    ]
+  },
+  "response": {
+    "status": 500,
+    "body": "Internal Server Error"
+  },
+  "priority": 5
+}

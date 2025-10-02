@@ -1,0 +1,16 @@
+{
+  "issues": [
+    {
+      "id": "12345",
+      "key": "TEST-123",
+      "self": "https://test.atlassian.net/rest/api/3/issue/12345",
+      "fields": {
+        "summary": "[ENG-123] Test Issue",
+        "customfield_10000": "linear-issue-id"
+      }
+    }
+  ],
+  "total": 1,
+  "startAt": 0,
+  "maxResults": 1
+}

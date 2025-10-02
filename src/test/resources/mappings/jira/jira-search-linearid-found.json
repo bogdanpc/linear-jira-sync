@@ -1,0 +1,18 @@
+{
+  "request": {
+    "urlPath": "/jira/rest/api/3/search",
+    "method": "GET",
+    "queryParameters": {
+      "jql": {
+        "contains": "linear-issue-id"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "bodyFileName": "jira-search-found.json",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}

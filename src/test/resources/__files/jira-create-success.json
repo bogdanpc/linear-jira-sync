@@ -1,0 +1,22 @@
+{
+  "id": "12345",
+  "key": "TEST-123",
+  "self": "https://test.atlassian.net/rest/api/3/issue/12345",
+  "fields": {
+    "summary": "[ENG-123] Test Issue",
+    "description": {
+      "type": "doc",
+      "version": 1,
+      "content": []
+    },
+    "issuetype": {
+      "id": "10001",
+      "name": "Task"
+    },
+    "project": {
+      "id": "10000",
+      "key": "TEST",
+      "name": "Test Project"
+    }
+  }
+}

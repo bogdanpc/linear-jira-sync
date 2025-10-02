@@ -1,0 +1,30 @@
+# Example Local Configuration
+# Copy this file to application-local.properties and add your credentials
+# Make sure application-local.properties is in your .gitignore!
+
+# Linear API Configuration
+linear.api.token=lin_api_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Jira API Configuration
+jira.api.url=https://your-domain.atlassian.net
+jira.api.username=your-email@example.com
+jira.api.token=your_jira_api_token_here
+jira.project.key=PROJ
+
+# Optional: Customize issue type (default: Task)
+#jira.issue.type=Story
+
+# Optional: Custom field ID for Linear issue tracking
+#jira.custom-field.linear-id=customfield_10001
+
+# Optional: Enable priority field mapping (default: false)
+#jira.enable-priority=true
+
+# Optional: Sync configuration
+#sync.dry-run=true
+#sync.batch-size=50
+
+# Optional: Attachment configuration
+#attachment.sync.enabled=true
+#attachment.download.timeout=30
+#attachment.download.max-size=10485760

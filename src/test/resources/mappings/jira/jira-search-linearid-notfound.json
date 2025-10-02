@@ -1,0 +1,18 @@
+{
+  "request": {
+    "urlPath": "/jira/rest/api/3/search",
+    "method": "GET",
+    "queryParameters": {
+      "jql": {
+        "contains": "nonexistent-id"
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "bodyFileName": "jira-search-empty.json",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}

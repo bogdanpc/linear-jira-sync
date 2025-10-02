@@ -1,0 +1,18 @@
+{
+  "request": {
+    "url": "/jira/rest/api/3/issue",
+    "method": "POST",
+    "bodyPatterns": [
+      {
+        "matchesJsonPath": "$.fields[?(@.summary == '[ENG-123] Test Issue')]"
+      }
+    ]
+  },
+  "response": {
+    "status": 201,
+    "bodyFileName": "jira-create-success.json",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}

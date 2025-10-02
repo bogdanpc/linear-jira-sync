@@ -1,0 +1,21 @@
+{
+  "issues": [
+    {
+      "id": "12345",
+      "key": "TEST-123",
+      "fields": {
+        "summary": "First Issue"
+      }
+    },
+    {
+      "id": "12346",
+      "key": "TEST-124",
+      "fields": {
+        "summary": "Second Issue"
+      }
+    }
+  ],
+  "total": 2,
+  "startAt": 0,
+  "maxResults": 50
+}

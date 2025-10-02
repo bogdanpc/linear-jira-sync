@@ -1,0 +1,42 @@
+{
+  "data": {
+    "issues": {
+      "nodes": [
+        {
+          "id": "issue-2",
+          "identifier": "ENG-124",
+          "title": "Second Issue",
+          "description": "Second description",
+          "priority": 3,
+          "state": {
+            "id": "state-2",
+            "name": "Done",
+            "type": "completed"
+          },
+          "assignee": null,
+          "creator": {
+            "id": "user-1",
+            "name": "Test User",
+            "email": "test@example.com",
+            "displayName": "Test User"
+          },
+          "team": {
+            "id": "team-1",
+            "name": "Engineering",
+            "key": "ENG"
+          },
+          "labels": {
+            "nodes": []
+          },
+          "createdAt": "2024-01-01T11:00:00Z",
+          "updatedAt": "2024-01-01T11:00:00Z",
+          "url": "https://linear.app/test/issue/ENG-124"
+        }
+      ],
+      "pageInfo": {
+        "hasNextPage": false,
+        "endCursor": null
+      }
+    }
+  }
+}

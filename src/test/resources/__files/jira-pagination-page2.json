@@ -1,0 +1,14 @@
+{
+  "issues": [
+    {
+      "id": "12346",
+      "key": "TEST-124",
+      "fields": {
+        "summary": "Second Issue"
+      }
+    }
+  ],
+  "total": 60,
+  "startAt": 50,
+  "maxResults": 50
+}

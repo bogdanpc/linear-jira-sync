@@ -1,0 +1,24 @@
+{
+  "request": {
+    "url": "/linear/",
+    "method": "POST",
+    "bodyPatterns": [
+      {
+        "contains": "\"key\":{\"eq\":\"ENG\"}"
+      },
+      {
+        "doesNotMatch": "\"type\""
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "bodyFileName": "linear-pagination-page2.json",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  },
+  "scenarioName": "pagination",
+  "requiredScenarioState": "SecondPage",
+  "priority": 3
+}
