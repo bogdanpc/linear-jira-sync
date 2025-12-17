@@ -1,6 +1,6 @@
 {
   "request": {
-    "urlPath": "/jira/rest/api/3/search",
+    "urlPath": "/jira/rest/api/3/search/jql",
     "method": "GET",
     "queryParameters": {
       "jql": {

@@ -2,6 +2,7 @@ package bogdanpc.linearsync.jira.control;
 
 import bogdanpc.linearsync.jira.entity.JiraIssue;
 import bogdanpc.linearsync.jira.entity.JiraIssueInput;
+import bogdanpc.linearsync.jira.entity.JiraProject;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.util.List;
@@ -14,12 +15,14 @@ public class JiraOperations {
     private final SearchOperations searchOperations;
     private final CommentOperations commentOperations;
     private final AttachmentOperations attachmentOperations;
+    private final TransitionOperations transitionOperations;
 
-    public JiraOperations(IssueOperations issueOperations, SearchOperations searchOperations, CommentOperations commentOperations, AttachmentOperations attachmentOperations) {
+    public JiraOperations(IssueOperations issueOperations, SearchOperations searchOperations, CommentOperations commentOperations, AttachmentOperations attachmentOperations, TransitionOperations transitionOperations) {
         this.issueOperations = issueOperations;
         this.searchOperations = searchOperations;
         this.commentOperations = commentOperations;
         this.attachmentOperations = attachmentOperations;
+        this.transitionOperations = transitionOperations;
     }
 
 
@@ -36,6 +39,10 @@ public class JiraOperations {
         return searchOperations.findIssueBySourceId(sourceIssueId);
     }
 
+    public Optional<JiraIssue> findIssueByIdentifier(String sourceIdentifier) {
+        return searchOperations.findIssueByIdentifierInSummary(sourceIdentifier);
+    }
+
     public List<JiraIssue> getAllIssuesInProject() {
         return searchOperations.getAllIssuesInProject();
     }
@@ -50,6 +57,14 @@ public class JiraOperations {
 
     public void syncAttachments(String jiraIssueKey, JiraIssueInput issueInput) {
         attachmentOperations.syncAttachments(jiraIssueKey, issueInput);
+    }
+
+    public List<JiraProject.IssueType> getProjectIssueTypes() {
+        return searchOperations.getProjectIssueTypes();
+    }
+
+    public void transitionIssueStatus(String jiraIssueKey, String linearStateType) {
+        transitionOperations.transitionIfNeeded(jiraIssueKey, linearStateType);
     }
 
 }

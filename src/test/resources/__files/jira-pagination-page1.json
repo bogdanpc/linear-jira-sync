@@ -51,7 +51,6 @@
     { "id": "123449", "key": "TEST-49", "fields": { "summary": "Issue 49" } },
     { "id": "123450", "key": "TEST-50", "fields": { "summary": "Issue 50" } }
   ],
-  "total": 60,
-  "startAt": 0,
-  "maxResults": 50
+  "total": 51,
+  "nextPageToken": "token-for-page-2"
 }

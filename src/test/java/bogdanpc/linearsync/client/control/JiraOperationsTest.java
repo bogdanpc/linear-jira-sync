@@ -78,16 +78,16 @@ class JiraOperationsTest {
 
     @Test
     void testGetAllIssuesInProject_WithPagination() {
-        var page1Stub = wiremock.register(get(urlPathEqualTo("/jira/rest/api/3/search"))
-                .withQueryParam("startAt", equalTo("0"))
+        var page1Stub = wiremock.register(get(urlPathEqualTo("/jira/rest/api/3/search/jql"))
                 .withQueryParam("maxResults", equalTo("50"))
+                .withQueryParam("nextPageToken", absent())
                 .willReturn(aResponse()
                         .withStatus(200)
                         .withHeader("Content-Type", "application/json")
                         .withBodyFile("jira-pagination-page1.json")));
 
-        var page2Stub = wiremock.register(get(urlPathEqualTo("/jira/rest/api/3/search"))
-                .withQueryParam("startAt", equalTo("50"))
+        var page2Stub = wiremock.register(get(urlPathEqualTo("/jira/rest/api/3/search/jql"))
+                .withQueryParam("nextPageToken", equalTo("token-for-page-2"))
                 .withQueryParam("maxResults", equalTo("50"))
                 .willReturn(aResponse()
                         .withStatus(200)
@@ -189,6 +189,8 @@ class JiraOperationsTest {
                 labels,
                 null,
                 null,
+                null,        // parent
+                null,        // children
                 Instant.parse("2024-01-01T10:00:00Z"),
                 Instant.parse("2024-01-02T10:00:00Z"),
                 "https://linear.app/test/issue/ENG-123"

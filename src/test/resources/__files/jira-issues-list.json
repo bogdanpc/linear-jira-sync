@@ -16,6 +16,5 @@
     }
   ],
   "total": 2,
-  "startAt": 0,
-  "maxResults": 50
+  "nextPageToken": null
 }

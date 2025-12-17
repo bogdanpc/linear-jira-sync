@@ -6,7 +6,9 @@ import bogdanpc.linearsync.jira.entity.JiraComment;
 import bogdanpc.linearsync.jira.entity.JiraCommentsResponse;
 import bogdanpc.linearsync.jira.entity.JiraCreateRequest;
 import bogdanpc.linearsync.jira.entity.JiraIssue;
+import bogdanpc.linearsync.jira.entity.JiraProject;
 import bogdanpc.linearsync.jira.entity.JiraSearchResponse;
+import bogdanpc.linearsync.jira.entity.JiraTransition;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -32,8 +34,8 @@ public interface JiraClient {
     void updateIssue(@PathParam("issueIdOrKey") String issueIdOrKey, JiraCreateRequest request);
 
     @GET
-    @Path("/rest/api/3/search")
-    JiraSearchResponse searchIssues(@QueryParam("jql") String jql, @QueryParam("startAt") Integer startAt, @QueryParam("maxResults") Integer maxResults);
+    @Path("/rest/api/3/search/jql")
+    JiraSearchResponse searchIssues(@QueryParam("jql") String jql, @QueryParam("nextPageToken") String nextPageToken, @QueryParam("maxResults") Integer maxResults);
 
     @GET
     @Path("/rest/api/3/myself")
@@ -56,5 +58,21 @@ public interface JiraClient {
     @Consumes(MediaType.MULTIPART_FORM_DATA)
     @Produces(MediaType.APPLICATION_JSON)
     List<JiraAttachment> addAttachment(@PathParam("issueIdOrKey") String issueIdOrKey, @FormParam("file") File file);
+
+    @GET
+    @Path("/rest/api/3/project/{projectKeyOrId}")
+    JiraProject getProject(@PathParam("projectKeyOrId") String projectKeyOrId);
+
+    @GET
+    @Path("/rest/api/3/issue/{issueIdOrKey}")
+    JiraIssue getIssue(@PathParam("issueIdOrKey") String issueIdOrKey);
+
+    @GET
+    @Path("/rest/api/3/issue/{issueIdOrKey}/transitions")
+    JiraTransition.TransitionsResponse getTransitions(@PathParam("issueIdOrKey") String issueIdOrKey);
+
+    @POST
+    @Path("/rest/api/3/issue/{issueIdOrKey}/transitions")
+    void doTransition(@PathParam("issueIdOrKey") String issueIdOrKey, JiraTransition.TransitionRequest request);
 
 }

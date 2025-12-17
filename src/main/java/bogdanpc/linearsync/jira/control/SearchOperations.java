@@ -2,6 +2,7 @@ package bogdanpc.linearsync.jira.control;
 
 import bogdanpc.linearsync.jira.entity.JiraComment;
 import bogdanpc.linearsync.jira.entity.JiraIssue;
+import bogdanpc.linearsync.jira.entity.JiraProject;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -28,7 +29,7 @@ class SearchOperations {
         var jql = buildSourceIdQuery(sourceIssueId);
 
         try {
-            var response = jiraClient.searchIssues(jql, 0, 1);
+            var response = jiraClient.searchIssues(jql, null, 1);
 
             if (response.issues() != null && !response.issues().isEmpty()) {
                 return Optional.of(response.issues().getFirst());
@@ -37,6 +38,30 @@ class SearchOperations {
             return Optional.empty();
         } catch (Exception e) {
             Log.errorf(e, "Failed to search for Jira issue with source ID: %s", sourceIssueId);
+            return Optional.empty();
+        }
+    }
+
+    Optional<JiraIssue> findIssueByIdentifierInSummary(String sourceIdentifier) {
+        // Search for issues with summary starting with [identifier]
+        var jql = String.format("project = %s AND summary ~ \"[%s]*\"", jiraProjectKey, sourceIdentifier);
+
+        try {
+            var response = jiraClient.searchIssues(jql, null, 1);
+
+            if (response.issues() != null && !response.issues().isEmpty()) {
+                var issue = response.issues().getFirst();
+                // Verify the summary actually starts with [identifier] to avoid false positives
+                if (issue.fields() != null && issue.fields().summary() != null
+                        && issue.fields().summary().startsWith("[" + sourceIdentifier + "]")) {
+                    Log.debugf("Found existing Jira issue %s for Linear %s", issue.key(), sourceIdentifier);
+                    return Optional.of(issue);
+                }
+            }
+
+            return Optional.empty();
+        } catch (Exception e) {
+            Log.debugf("Failed to search for Jira issue with identifier: %s - %s", sourceIdentifier, e.getMessage());
             return Optional.empty();
         }
     }
@@ -94,28 +119,32 @@ class SearchOperations {
 
     private List<JiraIssue> executePagedIssueSearch(String jql) {
         var allIssues = new ArrayList<JiraIssue>();
-        var startAt = 0;
+        String nextPageToken = null;
         var maxResults = 50;
-        var hasMore = true;
 
-        while (hasMore) {
+        do {
             try {
-                var response = jiraClient.searchIssues(jql, startAt, maxResults);
+                var response = jiraClient.searchIssues(jql, nextPageToken, maxResults);
 
                 if (response.issues() != null) {
                     allIssues.addAll(response.issues());
                 }
 
-                hasMore = response.issues() != null && response.issues().size() == maxResults && startAt + maxResults < response.total();
-                startAt += maxResults;
+                nextPageToken = response.nextPageToken();
 
             } catch (Exception e) {
                 Log.errorf(e, "Failed to fetch Jira issues with query: %s", jql);
                 break;
             }
-        }
+        } while (nextPageToken != null && !nextPageToken.isEmpty());
 
         Log.infof("Fetched %d Jira issues with query: %s", allIssues.size(), jql);
         return allIssues;
+    }
+
+    List<JiraProject.IssueType> getProjectIssueTypes() {
+        Log.debugf("Fetching issue types for project: %s", jiraProjectKey);
+        var project = jiraClient.getProject(jiraProjectKey);
+        return project.issueTypes() != null ? project.issueTypes() : List.of();
     }
 }
