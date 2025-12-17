@@ -90,6 +90,18 @@ public class IssueOperations {
                       endCursor
                     }
                   }
+                  parent {
+                    id
+                    identifier
+                    title
+                  }
+                  children {
+                    nodes {
+                      id
+                      identifier
+                      title
+                    }
+                  }
                   createdAt
                   updatedAt
                   url
@@ -117,7 +129,7 @@ public class IssueOperations {
     }
 
     private List<LinearIssue> fetchIssues(String teamKey, String stateType, Instant updatedAfter, String assigneeEmail) {
-        Log.infof("Fetching Linear issues for team: %s, state: %s, assignee: %s", teamKey, stateType, assigneeEmail);
+        Log.debugf("Fetching issues - team: %s, state: %s, assignee: %s", teamKey, stateType, assigneeEmail);
 
         var allIssues = new ArrayList<LinearIssue>();
         String cursor = null;
@@ -143,7 +155,7 @@ public class IssueOperations {
             cursor = response.data().issues().pageInfo().endCursor();
         }
 
-        Log.infof("Fetched %d Linear issues", allIssues.size());
+        Log.debugf("Fetched %d issues from Linear", allIssues.size());
         return allIssues;
     }
 
@@ -173,16 +185,16 @@ public class IssueOperations {
 
         if (response.data() != null && response.data().viewer() != null) {
             var user = response.data().viewer();
-            Log.infof("Successfully connected to Linear. User: %s (%s)", user.name(), user.email());
+            Log.debugf("Linear user: %s (%s)", user.name(), user.email());
             return user;
         } else {
-            Log.error("Failed to get user info from Linear API");
+            Log.error("Linear API connection failed");
             return null;
         }
     }
 
-    public Optional<LinearIssue> getIssueByIdentifier(String identifier) {
-        Log.infof("Fetching Linear issue by identifier: %s", identifier);
+    public Optional<LinearIssue> getIssueById(String id) {
+        Log.debugf("Fetching issue by ID: %s", id);
 
         var issueQuery = """
                 query GetIssue($id: String!) {
@@ -258,6 +270,127 @@ public class IssueOperations {
                       pageInfo {
                         hasNextPage
                         endCursor
+                      }
+                    }
+                    parent {
+                      id
+                      identifier
+                      title
+                    }
+                    children {
+                      nodes {
+                        id
+                        identifier
+                        title
+                      }
+                    }
+                    createdAt
+                    updatedAt
+                    url
+                  }
+                }
+                """;
+
+        var variables = Map.of("id", id);
+        var query = new GraphQLQuery(issueQuery, variables);
+
+        var response = linearClient.getIssue(query);
+
+        if (response.data() != null && response.data().issue() != null) {
+            return Optional.of(response.data().issue());
+        }
+        return Optional.empty();
+    }
+
+    public Optional<LinearIssue> getIssueByIdentifier(String identifier) {
+        Log.debugf("Fetching issue: %s", identifier);
+
+        var issueQuery = """
+                query GetIssue($id: String!) {
+                  issue(id: $id) {
+                    id
+                    identifier
+                    title
+                    description
+                    priority
+                    state {
+                      id
+                      name
+                      type
+                    }
+                    assignee {
+                      id
+                      name
+                      email
+                      displayName
+                    }
+                    creator {
+                      id
+                      name
+                      email
+                      displayName
+                    }
+                    team {
+                      id
+                      name
+                      key
+                    }
+                    labels {
+                      nodes {
+                        id
+                        name
+                        color
+                      }
+                    }
+                    comments(first: 100) {
+                      nodes {
+                        id
+                        body
+                        user {
+                          id
+                          name
+                          email
+                          displayName
+                        }
+                        createdAt
+                        updatedAt
+                        url
+                      }
+                      pageInfo {
+                        hasNextPage
+                        endCursor
+                      }
+                    }
+                    attachments(first: 50) {
+                      nodes {
+                        id
+                        title
+                        url
+                        sourceType
+                        creator {
+                          id
+                          name
+                          email
+                          displayName
+                        }
+                        metadata
+                        createdAt
+                      }
+                      pageInfo {
+                        hasNextPage
+                        endCursor
+                      }
+                    }
+                    parent {
+                      id
+                      identifier
+                      title
+                    }
+                    children {
+                      nodes {
+                        id
+                        identifier
+                        title
                       }
                     }
                     createdAt

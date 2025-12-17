@@ -1,5 +1,6 @@
-package bogdanpc.linearsync.jira.control;
+package bogdanpc.linearsync.jira.boundary;
 
+import bogdanpc.linearsync.jira.control.*;
 import bogdanpc.linearsync.jira.entity.JiraIssue;
 import bogdanpc.linearsync.jira.entity.JiraIssueInput;
 import bogdanpc.linearsync.jira.entity.JiraProject;
@@ -9,7 +10,7 @@ import java.util.List;
 import java.util.Optional;
 
 @ApplicationScoped
-public class JiraOperations {
+public class Jira {
 
     private final IssueOperations issueOperations;
     private final SearchOperations searchOperations;
@@ -17,7 +18,7 @@ public class JiraOperations {
     private final AttachmentOperations attachmentOperations;
     private final TransitionOperations transitionOperations;
 
-    public JiraOperations(IssueOperations issueOperations, SearchOperations searchOperations, CommentOperations commentOperations, AttachmentOperations attachmentOperations, TransitionOperations transitionOperations) {
+    public Jira(IssueOperations issueOperations, SearchOperations searchOperations, CommentOperations commentOperations, AttachmentOperations attachmentOperations, TransitionOperations transitionOperations) {
         this.issueOperations = issueOperations;
         this.searchOperations = searchOperations;
         this.commentOperations = commentOperations;

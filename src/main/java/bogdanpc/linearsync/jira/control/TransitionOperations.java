@@ -1,17 +1,15 @@
 package bogdanpc.linearsync.jira.control;
 
-import bogdanpc.linearsync.jira.entity.JiraIssue;
 import bogdanpc.linearsync.jira.entity.JiraTransition;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import java.util.Map;
 import java.util.Optional;
 
 @ApplicationScoped
-class TransitionOperations {
+public class TransitionOperations {
 
     private static final String TO_DO = "To Do";
     private static final String IN_PROGRESS = "In Progress";
@@ -31,18 +29,15 @@ class TransitionOperations {
     );
 
     private final JiraClient jiraClient;
-    private final boolean statusSyncEnabled;
+    private final JiraConfig config;
 
-    TransitionOperations(
-            @RestClient JiraClient jiraClient,
-            @ConfigProperty(name = "jira.enable-status-sync", defaultValue = "true") boolean statusSyncEnabled
-    ) {
+    TransitionOperations(@RestClient JiraClient jiraClient, JiraConfig config) {
         this.jiraClient = jiraClient;
-        this.statusSyncEnabled = statusSyncEnabled;
+        this.config = config;
     }
 
-    void transitionIfNeeded(String jiraIssueKey, String linearStateType) {
-        if (!statusSyncEnabled) {
+    public void transitionIfNeeded(String jiraIssueKey, String linearStateType) {
+        if (!config.statusSyncEnabled()) {
             Log.debugf("Status sync disabled, skipping transition for %s", jiraIssueKey);
             return;
         }

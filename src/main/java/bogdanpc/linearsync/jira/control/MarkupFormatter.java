@@ -4,7 +4,7 @@ import bogdanpc.linearsync.jira.entity.JiraIssueInput;
 import jakarta.enterprise.context.ApplicationScoped;
 
 @ApplicationScoped
-class FormatOperations {
+class MarkupFormatter {
 
     String formatCommentForJira(JiraIssueInput.CommentInput commentInput) {
         var formattedComment = new StringBuilder();

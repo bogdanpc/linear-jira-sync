@@ -5,7 +5,6 @@ import bogdanpc.linearsync.jira.entity.JiraIssue;
 import bogdanpc.linearsync.jira.entity.JiraProject;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import java.util.ArrayList;
@@ -13,19 +12,17 @@ import java.util.List;
 import java.util.Optional;
 
 @ApplicationScoped
-class SearchOperations {
+public class SearchOperations {
 
     private final JiraClient jiraClient;
-    private final String jiraProjectKey;
-    private final Optional<String> linearIdCustomField;
+    private final JiraConfig config;
 
-    SearchOperations(@RestClient JiraClient jiraClient, @ConfigProperty(name = "jira.project.key") String jiraProjectKey, @ConfigProperty(name = "jira.custom-field.linear-id", defaultValue = "") Optional<String> linearIdCustomField) {
+    SearchOperations(@RestClient JiraClient jiraClient, JiraConfig config) {
         this.jiraClient = jiraClient;
-        this.jiraProjectKey = jiraProjectKey;
-        this.linearIdCustomField = linearIdCustomField;
+        this.config = config;
     }
 
-    Optional<JiraIssue> findIssueBySourceId(String sourceIssueId) {
+    public Optional<JiraIssue> findIssueBySourceId(String sourceIssueId) {
         var jql = buildSourceIdQuery(sourceIssueId);
 
         try {
@@ -42,18 +39,22 @@ class SearchOperations {
         }
     }
 
-    Optional<JiraIssue> findIssueByIdentifierInSummary(String sourceIdentifier) {
-        // Search for issues with summary starting with [identifier]
-        var jql = String.format("project = %s AND summary ~ \"[%s]*\"", jiraProjectKey, sourceIdentifier);
+    /**
+     * Search for issues with summary starting with [identifier]
+     */
+    public Optional<JiraIssue> findIssueByIdentifierInSummary(String sourceIdentifier) {
+
+        var projectKey = config.projectKey().orElseThrow(() -> new IllegalStateException("Jira project key not configured"));
+        var jql = String.format("project = %s AND summary ~ \"[%s]*\"", projectKey, sourceIdentifier);
 
         try {
             var response = jiraClient.searchIssues(jql, null, 1);
 
             if (response.issues() != null && !response.issues().isEmpty()) {
                 var issue = response.issues().getFirst();
-                // Verify the summary actually starts with [identifier] to avoid false positives
+
                 if (issue.fields() != null && issue.fields().summary() != null
-                        && issue.fields().summary().startsWith("[" + sourceIdentifier + "]")) {
+                    && issue.fields().summary().startsWith("[" + sourceIdentifier + "]")) {
                     Log.debugf("Found existing Jira issue %s for Linear %s", issue.key(), sourceIdentifier);
                     return Optional.of(issue);
                 }
@@ -66,7 +67,7 @@ class SearchOperations {
         }
     }
 
-    List<JiraIssue> getAllIssuesInProject() {
+    public List<JiraIssue> getAllIssuesInProject() {
         var jql = buildProjectQuery();
         return executePagedIssueSearch(jql);
     }
@@ -101,20 +102,15 @@ class SearchOperations {
     }
 
     private String buildSourceIdQuery(String sourceIssueId) {
-        if (linearIdCustomField.isPresent() && !linearIdCustomField.get().isEmpty()) {
-            var fieldId = linearIdCustomField.get();
-            // Handle both formats: "customfield_10000" and "10000"
-            if (fieldId.startsWith("customfield_")) {
-                fieldId = fieldId.substring("customfield_".length());
-            }
-            return String.format("cf[%s] = \"%s\"", fieldId, sourceIssueId);
+        if (!config.hasLinearIdField()) {
+            throw new IllegalStateException("Cannot search by Linear ID - jira.custom-field.linear-id not configured");
         }
-        // Fallback to hardcoded field - should be configurable
-        return String.format("cf[10000] = \"%s\"", sourceIssueId);
+        return config.jqlByLinearId(sourceIssueId);
     }
 
     private String buildProjectQuery() {
-        return String.format("project = %s", jiraProjectKey);
+        var projectKey = config.projectKey().orElseThrow(() -> new IllegalStateException("Jira project key not configured"));
+        return String.format("project = %s", projectKey);
     }
 
     private List<JiraIssue> executePagedIssueSearch(String jql) {
@@ -142,9 +138,10 @@ class SearchOperations {
         return allIssues;
     }
 
-    List<JiraProject.IssueType> getProjectIssueTypes() {
-        Log.debugf("Fetching issue types for project: %s", jiraProjectKey);
-        var project = jiraClient.getProject(jiraProjectKey);
+    public List<JiraProject.IssueType> getProjectIssueTypes() {
+        var projectKey = config.projectKey().orElseThrow(() -> new IllegalStateException("Jira project key not configured"));
+        Log.debugf("Fetching issue types for project: %s", projectKey);
+        var project = jiraClient.getProject(projectKey);
         return project.issueTypes() != null ? project.issueTypes() : List.of();
     }
 }

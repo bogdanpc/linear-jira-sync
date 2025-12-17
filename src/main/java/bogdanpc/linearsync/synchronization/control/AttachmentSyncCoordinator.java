@@ -1,6 +1,6 @@
 package bogdanpc.linearsync.synchronization.control;
 
-import bogdanpc.linearsync.jira.control.JiraOperations;
+import bogdanpc.linearsync.jira.boundary.Jira;
 import bogdanpc.linearsync.jira.entity.JiraIssueInput;
 import bogdanpc.linearsync.linear.entity.LinearIssue;
 import bogdanpc.linearsync.synchronization.entity.SyncState;
@@ -10,10 +10,10 @@ import jakarta.enterprise.context.ApplicationScoped;
 @ApplicationScoped
 public class AttachmentSyncCoordinator {
 
-    private final JiraOperations jiraOperations;
+    private final Jira jira;
 
-    public AttachmentSyncCoordinator(JiraOperations jiraOperations) {
-        this.jiraOperations = jiraOperations;
+    public AttachmentSyncCoordinator(Jira jira) {
+        this.jira = jira;
     }
 
     public void syncAttachments(String jiraIssueKey, JiraIssueInput issueInput, LinearIssue linearIssue, SyncState state) {
@@ -43,7 +43,8 @@ public class AttachmentSyncCoordinator {
             issueInput.title(),
             issueInput.description(),
             issueInput.priority(),
-            issueInput.state(),
+            issueInput.stateName(),
+            issueInput.stateType(),
             issueInput.assigneeEmail(),
             issueInput.assigneeDisplayName(),
             issueInput.creatorEmail(),
@@ -55,11 +56,12 @@ public class AttachmentSyncCoordinator {
             unsyncedAttachments,
             issueInput.createdAt(),
             issueInput.updatedAt(),
-            issueInput.sourceUrl()
+            issueInput.sourceUrl(),
+            issueInput.parentJiraKey()
         );
 
         try {
-            jiraOperations.syncAttachments(jiraIssueKey, filteredIssueInput);
+            jira.syncAttachments(jiraIssueKey, filteredIssueInput);
 
             for (var attachment : unsyncedAttachments) {
                 state.markAttachmentSynced(linearIssue.id(), attachment.id());

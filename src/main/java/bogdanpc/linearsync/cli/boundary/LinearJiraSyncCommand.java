@@ -1,8 +1,8 @@
 package bogdanpc.linearsync.cli.boundary;
 
 import bogdanpc.linearsync.configuration.entity.ConfigurationException;
-import bogdanpc.linearsync.configuration.entity.SyncConfiguration;
-import bogdanpc.linearsync.jira.control.JiraOperations;
+import bogdanpc.linearsync.configuration.control.SyncConfiguration;
+import bogdanpc.linearsync.jira.boundary.Jira;
 import bogdanpc.linearsync.linear.control.IssueOperations;
 import bogdanpc.linearsync.linear.entity.LinearStateType;
 import bogdanpc.linearsync.synchronization.control.Synchronizer;
@@ -31,13 +31,13 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
     Synchronizer synchronizer;
 
     @Inject
-    JiraOperations jiraService;
+    Jira jiraService;
 
     @Inject
     IssueOperations linearService;
 
-    @Parameters(index = "0", description = "Action to perform: sync, status, reset, test-connection", defaultValue = "sync")
-    String action = "sync";
+    @Parameters(index = "0", description = "Action to perform: sync, status, reset, test-connection", defaultValue = "")
+    String action;
 
     @Option(names = {"-t", "--team"}, description = "Linear team key to sync (e.g., 'ENG')")
     String teamKey;
@@ -70,23 +70,39 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
     public Integer call() {
         if (quiet && verbose) {
             Log.error("Error: Cannot use both --quiet and --verbose options");
+            io.quarkus.runtime.Quarkus.asyncExit(1);
             return 1;
         }
 
-        LoggingConfigurer.configure(quiet, verbose);
+        LoggingConfig.configure(quiet, verbose);
 
         // Apply state directory override if provided
         if (stateDirectory != null && !stateDirectory.isBlank()) {
             System.setProperty("sync.storage.location", stateDirectory);
         }
 
-        return switch (action.toLowerCase()) {
-            case "sync" -> performSync();
-            case "status" -> showStatus();
-            case "reset" -> resetState();
-            case "test-connection" -> testConnection();
-            default -> unknownAction();
-        };
+        try {
+            int exitCode = switch (action.toLowerCase()) {
+                case "sync" -> performSync();
+                case "status" -> showStatus();
+                case "reset" -> resetState();
+                case "test-connection" -> testConnection();
+                case "list-issue-types" -> listIssueTypes();
+                default -> unknownAction();
+            };
+
+            return exitCode;
+        } finally {
+            // Schedule async exit to allow logs to flush
+            new Thread(() -> {
+                try {
+                    Thread.sleep(100); // Small delay to allow logs to flush
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                io.quarkus.runtime.Quarkus.asyncExit();
+            }).start();
+        }
     }
 
 
@@ -108,7 +124,7 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
 
             var result = issueIdentifier != null
                     ? synchronizer.synchronizeSingleIssue(issueIdentifier)
-                    : synchronizer.synchronize(teamKey, stateType.getValue(), updatedAfterInstant, forceFullSync);
+                    : synchronizer.synchronize(teamKey, stateType != null ? stateType.getValue() : null, updatedAfterInstant, forceFullSync);
 
             printSyncResults(result);
             return result.success ? 0 : 1;
@@ -149,20 +165,33 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
     }
 
     private void printSyncHeader(Instant updatedAfterInstant) {
-        Log.info("Starting Linear-Jira synchronization...");
         if (dryRun) {
-            Log.info("DRY RUN MODE - No actual changes will be made");
+            Log.info("Linear → Jira Sync (dry-run)");
+        } else {
+            Log.info("Linear → Jira Sync");
         }
 
-        Log.debug("Configuration:");
         if (issueIdentifier != null) {
-            Log.debug("  Single Issue: " + issueIdentifier);
+            Log.debugf("  Issue: %s", issueIdentifier);
         } else {
-            Log.debug("  Team: " + (teamKey != null ? teamKey : "all"));
-            Log.debug("  State: " + (stateType != null ? stateType.getValue() : "all"));
-            Log.debug("  Updated After: " + (updatedAfterInstant != null ? updatedAfterInstant : "last sync"));
-            Log.debug("  Force Full Sync: " + forceFullSync);
+            Log.debugf("  Team: %s | State: %s | Since: %s",
+                    teamKey != null ? teamKey : "all",
+                    stateType != null ? stateType.getValue() : "all",
+                    formatSinceFilter(updatedAfterInstant));
         }
+    }
+
+    private String formatSinceFilter(Instant updatedAfter) {
+        if (forceFullSync) return "full sync";
+        if (updatedAfter == null) return "last sync";
+        return formatTimestamp(updatedAfter);
+    }
+
+    private String formatTimestamp(Instant instant) {
+        if (instant == null) return "-";
+        var formatter = java.time.format.DateTimeFormatter.ofPattern("MMM d, HH:mm")
+                .withZone(java.time.ZoneId.systemDefault());
+        return formatter.format(instant);
     }
 
     private void printSyncResults(SyncResult result) {
@@ -176,11 +205,29 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
             }
         }
 
-        Log.info("Sync completed: %d created, %d updated, %d skipped, %d errors".formatted(
-                result.createdCount, result.updatedCount, result.skippedCount, result.errors.size()));
+        var summary = new StringBuilder();
+        if (result.createdCount > 0) summary.append(result.createdCount).append(" created");
+        if (result.updatedCount > 0) {
+            if (!summary.isEmpty()) summary.append(", ");
+            summary.append(result.updatedCount).append(" updated");
+        }
+        if (result.skippedCount > 0) {
+            if (!summary.isEmpty()) summary.append(", ");
+            summary.append(result.skippedCount).append(" skipped");
+        }
+        if (!result.errors.isEmpty()) {
+            if (!summary.isEmpty()) summary.append(", ");
+            summary.append(result.errors.size()).append(" errors");
+        }
+
+        if (summary.isEmpty()) {
+            Log.info("Done - no changes");
+        } else {
+            Log.infof("Done - %s", summary);
+        }
 
         if (!result.errors.isEmpty()) {
-            Log.error("Errors occurred during synchronization:");
+            Log.error("Errors:");
             for (var error : result.errors) {
                 Log.error("  " + error);
             }
@@ -258,8 +305,49 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
         return allConnected ? 0 : 1;
     }
 
+    private Integer listIssueTypes() {
+        System.out.println("Fetching available issue types from Jira project...");
+
+        try {
+            config.validate();
+        } catch (ConfigurationException e) {
+            System.err.println("Configuration error: " + e.getMessage());
+            return 1;
+        }
+
+        try {
+            var issueTypes = jiraService.getProjectIssueTypes();
+
+            if (issueTypes.isEmpty()) {
+                System.out.println("No issue types found for the configured project.");
+                return 0;
+            }
+
+            System.out.println();
+            System.out.println("Available issue types:");
+            System.out.println();
+            for (var issueType : issueTypes) {
+                var subtaskMarker = issueType.subtask() ? " [subtask]" : "";
+                System.out.printf("  - %s%s%n", issueType.name(), subtaskMarker);
+                if (issueType.description() != null && !issueType.description().isBlank()) {
+                    System.out.printf("      %s%n", issueType.description());
+                }
+            }
+
+            System.out.println();
+            System.out.println("To configure, set environment variables:");
+            System.out.println("  JIRA_ISSUE_TYPE=<name>      (for regular issues)");
+            System.out.println("  JIRA_SUBTASK_TYPE=<name>    (for subtasks, use a [subtask] type)");
+
+            return 0;
+        } catch (Exception e) {
+            System.err.println("Failed to fetch issue types: " + e.getMessage());
+            return 1;
+        }
+    }
+
     private Integer unknownAction() {
-        Log.error("Error: Unknown action '" + action + "'. Use: sync, status, reset, or test-connection");
+        Log.error("Error: Unknown action '" + action + "'. Use: sync, status, reset, test-connection, or list-issue-types");
         return 1;
     }
 }

@@ -4,32 +4,27 @@ import bogdanpc.linearsync.jira.entity.JiraComment;
 import bogdanpc.linearsync.jira.entity.JiraCreateRequest;
 import bogdanpc.linearsync.jira.entity.JiraIssue;
 import bogdanpc.linearsync.jira.entity.JiraIssueInput;
+import bogdanpc.linearsync.jira.entity.JiraProject;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 @ApplicationScoped
-class IssueOperations {
+public class IssueOperations {
 
     private final JiraClient jiraClient;
+    private final IssueFieldMapper issueFieldMapper;
+    private final JiraConfig config;
 
-    private final FieldOperations fieldOperations;
+    private String cachedSubtaskType;
 
-
-    private final String jiraProjectKey;
-
-
-    private final String defaultIssueType;
-
-    IssueOperations(@RestClient JiraClient jiraClient, FieldOperations fieldOperations, @ConfigProperty(name = "jira.project.key") String jiraProjectKey, @ConfigProperty(name = "jira.issue.type", defaultValue = "Task") String defaultIssueType) {
+    IssueOperations(@RestClient JiraClient jiraClient, IssueFieldMapper issueFieldMapper, JiraConfig config) {
         this.jiraClient = jiraClient;
-        this.fieldOperations = fieldOperations;
-        this.jiraProjectKey = jiraProjectKey;
-        this.defaultIssueType = defaultIssueType;
+        this.issueFieldMapper = issueFieldMapper;
+        this.config = config;
     }
 
-    JiraIssue createIssue(JiraIssueInput issueInput) {
+    public JiraIssue createIssue(JiraIssueInput issueInput) {
         Log.infof("Creating Jira issue for source issue: %s", issueInput.sourceIdentifier());
 
         var request = buildCreateRequest(issueInput);
@@ -44,7 +39,7 @@ class IssueOperations {
         }
     }
 
-    void updateIssue(String jiraIssueKey, JiraIssueInput issueInput) {
+    public void updateIssue(String jiraIssueKey, JiraIssueInput issueInput) {
         Log.infof("Updating Jira issue: %s", jiraIssueKey);
 
         var request = buildUpdateRequest(issueInput);
@@ -58,7 +53,7 @@ class IssueOperations {
         }
     }
 
-    boolean testConnection() {
+    public boolean testConnection() {
         try {
             var userInfo = jiraClient.getCurrentUser();
             Log.infof("Successfully connected to Jira. User: %s (%s)", userInfo.displayName(), userInfo.emailAddress());
@@ -81,18 +76,51 @@ class IssueOperations {
     }
 
     private JiraCreateRequest buildCreateRequest(JiraIssueInput issueInput) {
+        var projectKey = config.projectKey().orElseThrow(() -> new IllegalStateException("Jira project key not configured"));
+
         var request = new JiraCreateRequest();
         request.fields = new JiraCreateRequest.Fields();
-        request.fields.project = new JiraCreateRequest.Project(jiraProjectKey);
+        request.fields.project = new JiraCreateRequest.Project(projectKey);
         request.fields.summary = String.format("[%s] %s", issueInput.sourceIdentifier(), issueInput.title());
         request.fields.description = new JiraCreateRequest.Description(issueInput.description());
-        request.fields.issuetype = new JiraCreateRequest.IssueType(defaultIssueType);
 
-        fieldOperations.mapCustomFields(issueInput, request);
-        fieldOperations.mapPriorityIfEnabled(issueInput, request);
-        fieldOperations.mapLabels(issueInput, request);
+        // Determine issue type based on whether this is a subtask
+        var isSubtask = issueInput.parentJiraKey() != null && !issueInput.parentJiraKey().isEmpty();
+        var issueTypeName = isSubtask ? getSubtaskTypeName() : config.issueType();
+        request.fields.issuetype = new JiraCreateRequest.IssueType(issueTypeName);
+
+        // Set parent if this is a subtask
+        if (isSubtask) {
+            request.fields.parent = new JiraCreateRequest.Parent(issueInput.parentJiraKey());
+            Log.debugf("Creating subtask with parent: %s, type: %s", issueInput.parentJiraKey(), issueTypeName);
+        }
+
+        issueFieldMapper.mapCustomFields(issueInput, request);
+        issueFieldMapper.mapPriorityIfEnabled(issueInput, request);
+        issueFieldMapper.mapLabels(issueInput, request);
 
         return request;
+    }
+
+    private String getSubtaskTypeName() {
+        if (cachedSubtaskType != null) {
+            return cachedSubtaskType;
+        }
+
+        var projectKey = config.projectKey().orElseThrow(() -> new IllegalStateException("Jira project key not configured"));
+        var project = jiraClient.getProject(projectKey);
+        if (project.issueTypes() != null) {
+            cachedSubtaskType = project.issueTypes().stream()
+                    .filter(JiraProject.IssueType::subtask)
+                    .map(JiraProject.IssueType::name)
+                    .findFirst()
+                    .orElse("Subtask");
+            Log.debugf("Detected subtask type: %s", cachedSubtaskType);
+        } else {
+            cachedSubtaskType = "Subtask";
+        }
+
+        return cachedSubtaskType;
     }
 
     private JiraCreateRequest buildUpdateRequest(JiraIssueInput issueInput) {
@@ -101,8 +129,8 @@ class IssueOperations {
         request.fields.summary = String.format("[%s] %s", issueInput.sourceIdentifier(), issueInput.title());
         request.fields.description = new JiraCreateRequest.Description(issueInput.description());
 
-        fieldOperations.mapPriorityIfEnabled(issueInput, request);
-        fieldOperations.mapLabels(issueInput, request);
+        issueFieldMapper.mapPriorityIfEnabled(issueInput, request);
+        issueFieldMapper.mapLabels(issueInput, request);
 
         return request;
     }

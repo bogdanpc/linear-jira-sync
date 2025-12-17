@@ -10,18 +10,18 @@ import java.util.HashSet;
 import java.util.List;
 
 @ApplicationScoped
-class CommentOperations {
+public class CommentOperations {
 
 
     private final JiraClient jiraClient;
     private final SearchOperations searchOperations;
-    private final FormatOperations formatOperations;
+    private final MarkupFormatter markupFormatter;
     private final IssueOperations issueOperations;
 
-    CommentOperations(@RestClient JiraClient jiraClient, SearchOperations searchOperations, FormatOperations formatOperations, IssueOperations issueOperations) {
+    CommentOperations(@RestClient JiraClient jiraClient, SearchOperations searchOperations, MarkupFormatter markupFormatter, IssueOperations issueOperations) {
         this.jiraClient = jiraClient;
         this.searchOperations = searchOperations;
-        this.formatOperations = formatOperations;
+        this.markupFormatter = markupFormatter;
         this.issueOperations = issueOperations;
     }
 
@@ -39,7 +39,7 @@ class CommentOperations {
         }
     }
 
-    void syncComments(String jiraIssueKey, JiraIssueInput issueInput) {
+    public void syncComments(String jiraIssueKey, JiraIssueInput issueInput) {
         if (issueInput.comments() == null || issueInput.comments().isEmpty()) {
             Log.debugf("No comments to sync for source issue: %s", issueInput.sourceIdentifier());
             return;
@@ -53,7 +53,7 @@ class CommentOperations {
 
         for (var commentInput : issueInput.comments()) {
             try {
-                var commentText = formatOperations.formatCommentForJira(commentInput);
+                var commentText = markupFormatter.formatCommentForJira(commentInput);
 
                 if (isCommentAlreadyExists(commentText, existingCommentTexts)) {
                     Log.debugf("Comment already exists, skipping: %s", commentInput.id());
