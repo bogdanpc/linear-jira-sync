@@ -1,7 +1,7 @@
 package bogdanpc.linearsync.cli.boundary;
 
-import bogdanpc.linearsync.configuration.entity.ConfigurationException;
 import bogdanpc.linearsync.configuration.control.SyncConfiguration;
+import bogdanpc.linearsync.configuration.entity.ConfigurationException;
 import bogdanpc.linearsync.jira.boundary.Jira;
 import bogdanpc.linearsync.linear.control.IssueOperations;
 import bogdanpc.linearsync.linear.entity.LinearStateType;
@@ -82,7 +82,8 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
         }
 
         try {
-            int exitCode = switch (action.toLowerCase()) {
+
+            return switch (action.toLowerCase()) {
                 case "sync" -> performSync();
                 case "status" -> showStatus();
                 case "reset" -> resetState();
@@ -90,8 +91,6 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
                 case "list-issue-types" -> listIssueTypes();
                 default -> unknownAction();
             };
-
-            return exitCode;
         } finally {
             // Schedule async exit to allow logs to flush
             new Thread(() -> {

@@ -45,11 +45,12 @@ public class ListLinearIssuesCommand implements Callable<Integer> {
             return 1;
         }
 
-        LoggingConfigurer.configure(quiet, verbose);
+        LoggingConfig.configure(quiet, verbose);
 
         try {
             var updatedAfterInstant = getUpdatedAfterInstant();
-            if (updatedAfterInstant == null) return 1;
+            if (updatedAfterInstant == null)
+                return 1;
 
             Log.info("Fetching Linear issues...");
             Log.debug("Configuration:");

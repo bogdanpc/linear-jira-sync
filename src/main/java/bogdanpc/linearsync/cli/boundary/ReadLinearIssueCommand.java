@@ -44,7 +44,7 @@ public class ReadLinearIssueCommand implements Callable<Integer> {
             return 1;
         }
 
-        LoggingConfigurer.configure(quiet, verbose);
+        LoggingConfig.configure(quiet, verbose);
         Log.info("Fetching Linear issue: " + issueIdentifier);
 
         try {
@@ -151,6 +151,5 @@ public class ReadLinearIssueCommand implements Callable<Integer> {
             Log.info("No comments found.");
         }
     }
-
 
 }

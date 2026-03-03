@@ -3,12 +3,12 @@ package bogdanpc.linearsync.cli.boundary;
 /**
  * Configure logging levels in CLI commands.
  */
-public final class LoggingConfigurer {
+public final class LoggingConfig {
 
     public static final String QUARKUS_LOG_LEVEL = "quarkus.log.level";
     public static final String QUARKUS_LOG_CONSOLE_LEVEL = "quarkus.log.console.level";
 
-    private LoggingConfigurer() {
+    private LoggingConfig() {
         // Logging class - prevent instantiation
     }
 
