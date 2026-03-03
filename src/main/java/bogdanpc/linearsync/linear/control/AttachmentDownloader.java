@@ -1,5 +1,6 @@
 package bogdanpc.linearsync.linear.control;
 
+import bogdanpc.linearsync.configuration.control.SyncConfiguration;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -19,8 +20,7 @@ import java.util.Optional;
 @ApplicationScoped
 public class AttachmentDownloader {
 
-    @ConfigProperty(name = "linear.api.token")
-    Optional<String> linearApiToken;
+    private final SyncConfiguration syncConfiguration;
 
     @ConfigProperty(name = "attachment.download.timeout", defaultValue = "30")
     int timeoutSeconds;
@@ -30,7 +30,8 @@ public class AttachmentDownloader {
 
     private final HttpClient httpClient;
 
-    public AttachmentDownloader() {
+    AttachmentDownloader(SyncConfiguration syncConfiguration) {
+        this.syncConfiguration = syncConfiguration;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(30))
                 .build();
@@ -90,9 +91,7 @@ public class AttachmentDownloader {
                 .timeout(Duration.ofSeconds(timeoutSeconds))
                 .GET();
 
-        if (linearApiToken.isPresent() && !linearApiToken.get().isEmpty()) {
-            requestBuilder.header("Authorization", linearApiToken.get());
-        }
+        requestBuilder.header("Authorization", "Bearer " + syncConfiguration.linearApiToken());
 
         return requestBuilder.build();
     }
@@ -126,7 +125,7 @@ public class AttachmentDownloader {
             Log.debugf("Downloaded %d bytes for attachment %s", totalBytes, attachmentId);
             return true;
 
-        } catch (Exception e) {
+        } catch (IOException e) {
             Log.errorf(e, "Failed to write attachment %s to file %s", attachmentId, tempFile.getAbsolutePath());
             if (tempFile.exists()) {
                 tempFile.delete();
