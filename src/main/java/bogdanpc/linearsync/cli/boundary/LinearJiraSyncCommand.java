@@ -66,6 +66,12 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
     @Option(names = {"--state-dir"}, description = "Custom directory for state file storage (overrides LINEARSYNC_STORAGE_LOCATION)")
     String stateDirectory;
 
+    @Option(names = {"--config"}, description = "Path to external configuration file (e.g., ~/.linear-jira-sync/config.properties)")
+    String configFile;
+
+    @Option(names = {"--jira-project-key"}, description = "Target Jira project key (overrides JIRA_PROJECT_KEY)")
+    String jiraProjectKey;
+
     @Override
     public Integer call() {
         if (quiet && verbose) {
@@ -76,17 +82,18 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
 
         LoggingConfig.configure(quiet, verbose);
 
-        // Apply state directory override if provided
+        // Apply CLI overrides for configuration properties
         if (stateDirectory != null && !stateDirectory.isBlank()) {
             System.setProperty("sync.storage.location", stateDirectory);
+        }
+        if (jiraProjectKey != null && !jiraProjectKey.isBlank()) {
+            System.setProperty("jira.project.key", jiraProjectKey);
         }
 
         try {
 
             return switch (action.toLowerCase()) {
                 case "sync" -> performSync();
-                case "status" -> showStatus();
-                case "reset" -> resetState();
                 case "test-connection" -> testConnection();
                 case "list-issue-types" -> listIssueTypes();
                 default -> unknownAction();
@@ -231,16 +238,6 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
                 Log.error("  " + error);
             }
         }
-    }
-
-    private Integer showStatus() {
-        Log.info("Sync status functionality not yet implemented");
-        return 0;
-    }
-
-    private Integer resetState() {
-        Log.info("Reset state functionality not yet implemented");
-        return 0;
     }
 
     private Integer testConnection() {

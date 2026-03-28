@@ -100,6 +100,7 @@
                     <systemPropertyVariables>
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         <maven.home>${maven.home}</maven.home>
+                        <smallrye.config.locations>src/test/resources/application.properties</smallrye.config.locations>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
@@ -120,6 +121,7 @@
                         <native.image.path>${project.build.directory}/${project.build.finalName}-runner</native.image.path>
                         <java.util.logging.manager>org.jboss.logmanager.LogManager</java.util.logging.manager>
                         <maven.home>${maven.home}</maven.home>
+                        <quarkus.config.locations>src/test/resources/application.properties</quarkus.config.locations>
                     </systemPropertyVariables>
                 </configuration>
             </plugin>

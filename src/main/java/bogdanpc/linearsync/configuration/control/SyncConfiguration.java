@@ -2,10 +2,8 @@ package bogdanpc.linearsync.configuration.control;
 
 import bogdanpc.linearsync.configuration.entity.ConfigurationException;
 import bogdanpc.linearsync.jira.control.JiraConfig;
+import bogdanpc.linearsync.linear.control.LinearConfig;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
-
-import java.util.Optional;
 
 /**
  * Validates that all required configuration is present for Linear-Jira synchronization.
@@ -16,16 +14,15 @@ import java.util.Optional;
 public class SyncConfiguration {
 
     private final JiraConfig jiraConfig;
+    private final LinearConfig linearConfig;
 
-    @ConfigProperty(name = "linear.api.token")
-    Optional<String> linearApiToken;
-
-    SyncConfiguration(JiraConfig jiraConfig) {
+    SyncConfiguration(JiraConfig jiraConfig, LinearConfig linearConfig) {
         this.jiraConfig = jiraConfig;
+        this.linearConfig = linearConfig;
     }
 
     public String linearApiToken() {
-        return linearApiToken.orElseThrow(() ->
+        return linearConfig.api().token().orElseThrow(() ->
                 new ConfigurationException("Linear API token is required (LINEAR_API_TOKEN or linear.api.token)"));
     }
 
@@ -35,7 +32,7 @@ public class SyncConfiguration {
      * @throws ConfigurationException if required configuration is missing
      */
     public void validate() {
-        if (linearApiToken.isEmpty()) {
+        if (linearConfig.api().token().isEmpty()) {
             throw new ConfigurationException("Linear API token is required (LINEAR_API_TOKEN or linear.api.token)");
         }
 

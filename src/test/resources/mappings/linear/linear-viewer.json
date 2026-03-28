@@ -1,0 +1,27 @@
+{
+  "request": {
+    "url": "/linear/",
+    "method": "POST",
+    "bodyPatterns": [
+      {
+        "contains": "viewer"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "jsonBody": {
+      "data": {
+        "viewer": {
+          "id": "test-user-id",
+          "name": "Test User",
+          "email": "test@example.com"
+        }
+      }
+    },
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  },
+  "priority": 10
+}

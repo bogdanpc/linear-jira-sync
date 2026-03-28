@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -19,6 +20,35 @@ class SyncStateRepositoryTest {
 
     @Inject
     SyncStateRepository stateManager;
+
+    static SyncConfig testSyncConfig(String location, int maxBackups) {
+        return new SyncConfig() {
+            @Override
+            public boolean dryRun() {
+                return false;
+            }
+
+            @Override
+            public int batchSize() {
+                return 50;
+            }
+
+            @Override
+            public Storage storage() {
+                return new Storage() {
+                    @Override
+                    public Optional<String> location() {
+                        return Optional.ofNullable(location);
+                    }
+
+                    @Override
+                    public int maxBackups() {
+                        return maxBackups;
+                    }
+                };
+            }
+        };
+    }
 
     private Path tempDir;
     private Path originalStateFile;
@@ -71,7 +101,7 @@ class SyncStateRepositoryTest {
     @Test
     void testLoadState_NewFile() {
         // Create new StateManager with temp directory
-        var testStateManager = new SyncStateRepository("current", 5);
+        var testStateManager = new SyncStateRepository(testSyncConfig("current", 5));
 
         var state = testStateManager.loadState();
 
@@ -84,7 +114,7 @@ class SyncStateRepositoryTest {
 
     @Test
     void testSaveAndLoadState() {
-        var testStateManager = new SyncStateRepository("current", 5);
+        var testStateManager = new SyncStateRepository(testSyncConfig("current", 5));
 
         var originalState = new SyncState();
         originalState.addSyncedIssue("linear-123", "JIRA-456", "jira-id-456");
@@ -110,7 +140,7 @@ class SyncStateRepositoryTest {
 
     @Test
     void testSaveState_UpdatesLastSyncTime() throws InterruptedException {
-        var testStateManager = new SyncStateRepository("current", 5);
+        var testStateManager = new SyncStateRepository(testSyncConfig("current", 5));
 
         var state = new SyncState();
         Instant beforeSave = Instant.now();
@@ -124,7 +154,7 @@ class SyncStateRepositoryTest {
 
     @Test
     void testBackupState() throws IOException {
-        var testStateManager = new SyncStateRepository("current", 5);
+        var testStateManager = new SyncStateRepository(testSyncConfig("current", 5));
 
         // Create and save initial state
         var state = new SyncState();
@@ -145,7 +175,7 @@ class SyncStateRepositoryTest {
 
     @Test
     void testBackupState_NoExistingFile() {
-        var testStateManager = new SyncStateRepository("current", 5);
+        var testStateManager = new SyncStateRepository(testSyncConfig("current", 5));
 
         // Should not throw exception when no state file exists
         assertDoesNotThrow(testStateManager::backupState);
@@ -153,7 +183,7 @@ class SyncStateRepositoryTest {
 
     @Test
     void testDeleteState() {
-        var testStateManager = new SyncStateRepository("current", 5);
+        var testStateManager = new SyncStateRepository(testSyncConfig("current", 5));
 
         var state = new SyncState();
         testStateManager.saveState(state);
@@ -167,14 +197,14 @@ class SyncStateRepositoryTest {
 
     @Test
     void testDeleteState_NoFile() {
-        var testStateManager = new SyncStateRepository("current", 5);
+        var testStateManager = new SyncStateRepository(testSyncConfig("current", 5));
 
         assertDoesNotThrow(testStateManager::deleteState, "Should not throw exception when no file exists");
     }
 
     @Test
     void testStateFileExists() {
-        var testStateManager = new SyncStateRepository("current", 5);
+        var testStateManager = new SyncStateRepository(testSyncConfig("current", 5));
 
         // Ensure clean state - delete any existing file from previous test runs
         testStateManager.deleteState();
@@ -189,7 +219,7 @@ class SyncStateRepositoryTest {
 
     @Test
     void testValidateState_ValidState() {
-        var testStateManager = new SyncStateRepository("current", 5);
+        var testStateManager = new SyncStateRepository(testSyncConfig("current", 5));
 
         var state = new SyncState();
         state.addSyncedIssue("linear-123", "JIRA-456", "jira-456");
@@ -199,7 +229,7 @@ class SyncStateRepositoryTest {
 
     @Test
     void testValidateState_NullState() {
-        var testStateManager = new SyncStateRepository("current", 5);
+        var testStateManager = new SyncStateRepository(testSyncConfig("current", 5));
 
         var exception = assertThrows(IllegalArgumentException.class, () -> testStateManager.validateState(null));
 
@@ -208,7 +238,7 @@ class SyncStateRepositoryTest {
 
     @Test
     void testValidateState_InitializesNullFields() {
-        var testStateManager = new SyncStateRepository("current", 5);
+        var testStateManager = new SyncStateRepository(testSyncConfig("current", 5));
 
         var state = new SyncState();
         state.syncedIssues = null;
@@ -223,7 +253,7 @@ class SyncStateRepositoryTest {
 
     @Test
     void testValidateState_RemovesInvalidEntries() {
-        var testStateManager = new SyncStateRepository("current", 5);
+        var testStateManager = new SyncStateRepository(testSyncConfig("current", 5));
 
         var state = new SyncState();
 
@@ -248,7 +278,7 @@ class SyncStateRepositoryTest {
 
     @Test
     void testLoadState_CorruptedFile() throws IOException {
-        var testStateManager = new SyncStateRepository("current", 5);
+        var testStateManager = new SyncStateRepository(testSyncConfig("current", 5));
 
         // Write corrupted JSON to state file
         var stateFile = testStateManager.getStateFilePath();

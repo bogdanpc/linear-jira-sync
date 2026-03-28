@@ -3,21 +3,19 @@ package bogdanpc.linearsync.synchronization.control;
 import bogdanpc.linearsync.synchronization.entity.SyncState;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.time.Instant;
 
 @ApplicationScoped
 public class SyncCoordinator {
 
     private final SyncStateRepository stateRepository;
-
-    @ConfigProperty(name = "sync.dry-run", defaultValue = "false")
-    boolean configDryRun;
+    private final SyncConfig syncConfig;
 
     private boolean dryRun;
 
-    public SyncCoordinator(SyncStateRepository stateRepository) {
+    public SyncCoordinator(SyncStateRepository stateRepository, SyncConfig syncConfig) {
         this.stateRepository = stateRepository;
+        this.syncConfig = syncConfig;
     }
 
     public void setDryRun(boolean dryRun) {
@@ -25,7 +23,7 @@ public class SyncCoordinator {
     }
 
     public boolean isDryRun() {
-        return dryRun || configDryRun;
+        return dryRun || syncConfig.dryRun();
     }
 
     public SyncState prepareSync() {
@@ -47,21 +45,21 @@ public class SyncCoordinator {
 
     public Instant determineUpdatedAfter(SyncState state, Instant requestedUpdatedAfter, boolean forceFullSync) {
         if (forceFullSync) {
-            Log.info("Force full sync requested - ignoring update time filters");
+            Log.debug("Full sync requested");
             return null;
         }
 
         if (requestedUpdatedAfter != null) {
-            Log.infof("Using requested updated after time: %s", requestedUpdatedAfter);
+            Log.debugf("Using requested filter: %s", requestedUpdatedAfter);
             return requestedUpdatedAfter;
         }
 
         if (state.lastSyncTime != null) {
-            Log.infof("Using last sync time as updated after: %s", state.lastSyncTime);
+            Log.debugf("Using last sync time: %s", state.lastSyncTime);
             return state.lastSyncTime;
         }
 
-        Log.info("No previous sync time found - performing full sync");
+        Log.debug("No previous sync - full sync");
         return null;
     }
 }

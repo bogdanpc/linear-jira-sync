@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -25,12 +24,12 @@ public class SyncStateRepository {
     private final Path stateFilePath;
     private final int maxBackups;
 
-    public SyncStateRepository(@ConfigProperty(name = "sync.storage.location") String storageLocation, @ConfigProperty(name = "sync.storage.max-backups", defaultValue = "5") int maxBackups) {
+    public SyncStateRepository(SyncConfig syncConfig) {
         this.objectMapper = new ObjectMapper();
         this.objectMapper.registerModule(new JavaTimeModule());
-        this.maxBackups = maxBackups;
-        this.stateFilePath = resolveStateFilePath(storageLocation);
-        Log.infof("Using state file location: %s", stateFilePath);
+        this.maxBackups = syncConfig.storage().maxBackups();
+        this.stateFilePath = resolveStateFilePath(syncConfig.storage().location().orElse(null));
+        Log.debugf("State file: %s", stateFilePath);
     }
 
     private static boolean isBackupPath(Path p) {
@@ -51,64 +50,59 @@ public class SyncStateRepository {
     }
 
     public SyncState loadState() {
-        Log.debugf("Loading sync state from: %s", stateFilePath);
+        Log.debugf("Loading state from: %s", stateFilePath);
 
         if (!Files.exists(stateFilePath)) {
-            Log.info("No existing sync state file found, creating new state");
+            Log.debug("No state file found, starting fresh");
             return createNewState();
         }
 
         try {
             var content = Files.readString(stateFilePath);
             var state = objectMapper.readValue(content, SyncState.class);
-            Log.infof("Loaded sync state with %d synced issues, last sync: %s", state.syncedIssues.size(), state.lastSyncTime);
+            Log.debugf("Loaded state: %d issues tracked", state.syncedIssues.size());
             return state;
         } catch (IOException e) {
-            Log.errorf(e, "Failed to load sync state from: %s", stateFilePath);
-            Log.warn("Creating new sync state due to load failure");
+            Log.errorf(e, "Failed to load state from: %s", stateFilePath);
+            Log.warn("Starting with fresh state");
             return createNewState();
         }
     }
 
     public void saveState(SyncState state) {
-        Log.debugf("Saving sync state to: %s", stateFilePath);
+        Log.debugf("Saving state to: %s", stateFilePath);
 
         try {
-            // Update the last sync time before saving
             state.updateLastSyncTime();
 
             var json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(state);
 
-            // Create parent directories if they don't exist
             var parentDir = stateFilePath.getParent();
             if (parentDir != null && !Files.exists(parentDir)) {
                 Files.createDirectories(parentDir);
             }
 
             Files.writeString(stateFilePath, json);
-            Log.infof("Saved sync state with %d synced issues", state.syncedIssues.size());
+            Log.debugf("Saved state: %d issues tracked", state.syncedIssues.size());
 
         } catch (IOException e) {
-            Log.errorf(e, "Failed to save sync state to: %s", stateFilePath);
+            Log.errorf(e, "Failed to save state");
             throw new RuntimeException("Failed to save sync state", e);
         }
     }
 
     public void backupState() {
         if (!Files.exists(stateFilePath)) {
-            Log.debug("No state file to backup");
             return;
         }
 
         try {
             var backupPath = Paths.get(stateFilePath + ".backup." + System.currentTimeMillis());
             Files.copy(stateFilePath, backupPath);
-            Log.infof("Created backup of sync state at: %s", backupPath);
-
-            // Rotate old backups to prevent unlimited growth
+            Log.debugf("Created state backup");
             rotateBackups();
         } catch (IOException e) {
-            Log.errorf(e, "Failed to create backup of sync state");
+            Log.warnf(e, "Failed to backup state");
         }
     }
 

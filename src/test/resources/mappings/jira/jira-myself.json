@@ -1,0 +1,17 @@
+{
+  "request": {
+    "url": "/jira/rest/api/3/myself",
+    "method": "GET"
+  },
+  "response": {
+    "status": 200,
+    "jsonBody": {
+      "accountId": "test-account-id",
+      "displayName": "Test User",
+      "emailAddress": "test@example.com"
+    },
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}

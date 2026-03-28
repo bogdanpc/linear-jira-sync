@@ -1,9 +1,7 @@
 package bogdanpc.linearsync.linear.control;
 
-import bogdanpc.linearsync.configuration.control.SyncConfiguration;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -20,18 +18,13 @@ import java.util.Optional;
 @ApplicationScoped
 public class AttachmentDownloader {
 
-    private final SyncConfiguration syncConfiguration;
-
-    @ConfigProperty(name = "attachment.download.timeout", defaultValue = "30")
-    int timeoutSeconds;
-
-    @ConfigProperty(name = "attachment.download.max-size", defaultValue = "10485760") // 10MB
-    long maxFileSizeBytes;
-
+    private final LinearConfig linearConfig;
+    private final AttachmentConfig attachmentConfig;
     private final HttpClient httpClient;
 
-    AttachmentDownloader(SyncConfiguration syncConfiguration) {
-        this.syncConfiguration = syncConfiguration;
+    AttachmentDownloader(LinearConfig linearConfig, AttachmentConfig attachmentConfig) {
+        this.linearConfig = linearConfig;
+        this.attachmentConfig = attachmentConfig;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(30))
                 .build();
@@ -64,10 +57,11 @@ public class AttachmentDownloader {
                 return Optional.empty();
             }
 
+            var maxSize = attachmentConfig.download().maxSize();
             var contentLength = response.headers().firstValueAsLong("content-length");
-            if (contentLength.isPresent() && contentLength.getAsLong() > maxFileSizeBytes) {
+            if (contentLength.isPresent() && contentLength.getAsLong() > maxSize) {
                 Log.warnf("Attachment %s is too large (%d bytes). Max allowed: %d bytes",
-                         attachmentId, contentLength.getAsLong(), maxFileSizeBytes);
+                         attachmentId, contentLength.getAsLong(), maxSize);
                 return Optional.empty();
             }
 
@@ -88,10 +82,10 @@ public class AttachmentDownloader {
     private HttpRequest buildRequest(String url) {
         var requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .timeout(Duration.ofSeconds(timeoutSeconds))
+                .timeout(Duration.ofSeconds(attachmentConfig.download().timeout()))
                 .GET();
 
-        requestBuilder.header("Authorization", "Bearer " + syncConfiguration.linearApiToken());
+        requestBuilder.header("Authorization", "Bearer " + linearConfig.api().token().orElseThrow());
 
         return requestBuilder.build();
     }
@@ -114,7 +108,7 @@ public class AttachmentDownloader {
 
             while ((bytesRead = is.read(buffer)) != -1) {
                 totalBytes += bytesRead;
-                if (totalBytes > maxFileSizeBytes) {
+                if (totalBytes > attachmentConfig.download().maxSize()) {
                     Log.warnf("Attachment %s exceeded max size during download. Aborting.", attachmentId);
                     tempFile.delete();
                     return false;

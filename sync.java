@@ -1,6 +1,6 @@
 ///usr/bin/env jbang "$0" "$@" ; exit $?
 //JAVA 25+
-//DEPS io.quarkus.platform:quarkus-bom:3.32.1@pom
+//DEPS io.quarkus.platform:quarkus-bom:3.34.1@pom
 //DEPS io.quarkus:quarkus-picocli
 //DEPS io.quarkus:quarkus-rest-client-jackson
 //DEPS io.quarkus:quarkus-arc
@@ -10,32 +10,11 @@
 //SOURCES src/main/java/**/*.java
 //FILES src/main/resources/application.properties
 
-import bogdanpc.linearsync.cli.boundary.LinearJiraSyncCommand;
+import bogdanpc.linearsync.cli.boundary.Application;
 
-import picocli.CommandLine;
-
-import io.quarkus.runtime.Quarkus;
-import io.quarkus.runtime.QuarkusApplication;
-import io.quarkus.runtime.annotations.QuarkusMain;
-import io.quarkus.picocli.runtime.annotations.TopCommand;
-import jakarta.inject.Inject;
-
-@QuarkusMain
-public class sync implements QuarkusApplication {
-
-  @Inject
-  CommandLine.IFactory factory;
-
-  @Inject
-  @TopCommand
-  LinearJiraSyncCommand command;
-
-  @Override
-  public int run(String... args) throws Exception {
-    return new CommandLine(command, factory).execute(args);
-  }
+public class sync {
 
   public static void main(String... args) {
-    Quarkus.run(sync.class, args);
+    Application.main(args);
   }
 }

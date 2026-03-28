@@ -1,10 +1,10 @@
 package bogdanpc.linearsync.jira.control;
 
 import bogdanpc.linearsync.jira.entity.JiraIssueInput;
+import bogdanpc.linearsync.linear.control.AttachmentConfig;
 import bogdanpc.linearsync.linear.control.AttachmentDownloader;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import java.io.File;
@@ -16,25 +16,25 @@ public class AttachmentOperations {
         SUCCESS, SKIPPED, FAILED
     }
 
-    @ConfigProperty(name = "attachment.sync.enabled", defaultValue = "true")
-    boolean attachmentSyncEnabled;
-
     private final JiraClient jiraClient;
     private final MarkupFormatter markupFormatter;
     private final CommentOperations commentOperations;
     private final IssueOperations issueOperations;
     private final AttachmentDownloader attachmentDownloader;
+    private final AttachmentConfig attachmentConfig;
 
     AttachmentOperations(@RestClient JiraClient jiraClient,
                          MarkupFormatter markupFormatter,
                          CommentOperations commentOperations,
                          IssueOperations issueOperations,
-                         AttachmentDownloader attachmentDownloader) {
+                         AttachmentDownloader attachmentDownloader,
+                         AttachmentConfig attachmentConfig) {
         this.jiraClient = jiraClient;
         this.markupFormatter = markupFormatter;
         this.commentOperations = commentOperations;
         this.issueOperations = issueOperations;
         this.attachmentDownloader = attachmentDownloader;
+        this.attachmentConfig = attachmentConfig;
     }
 
     public void syncAttachments(String jiraIssueKey, JiraIssueInput issueInput) {
@@ -56,7 +56,7 @@ public class AttachmentOperations {
         Log.infof("Processing %d attachments from source issue %s for Jira issue %s",
                 issueInput.attachments().size(), issueInput.sourceIdentifier(), jiraIssueKey);
 
-        if (!attachmentSyncEnabled) {
+        if (!attachmentConfig.syncEnabled()) {
             Log.debugf("Attachment sync is disabled. Adding attachment info as comments for issue %s", jiraIssueKey);
             syncAttachmentsAsComments(jiraIssueKey, issueInput);
             return;
@@ -83,13 +83,19 @@ public class AttachmentOperations {
         Log.debugf("Syncing attachment %s (%s) to Jira issue %s",
                 attachmentInput.id(), attachmentInput.title(), jiraIssueKey);
 
+        if (!isDownloadableAttachment(attachmentInput)) {
+            Log.infof("Attachment %s is an external link (%s), adding as comment instead of downloading",
+                    attachmentInput.id(), attachmentInput.sourceType());
+            addAttachmentAsComment(jiraIssueKey, attachmentInput);
+            return SyncResult.SKIPPED;
+        }
+
         File tempFile = null;
         try {
             var downloadResult = attachmentDownloader.downloadAttachment(
                     attachmentInput.id(),
                     attachmentInput.url(),
-                    attachmentInput.title()
-            );
+                    attachmentInput.title());
 
             if (downloadResult.isEmpty()) {
                 Log.warnf("Failed to download attachment %s. Adding as comment instead.", attachmentInput.id());
@@ -134,11 +140,24 @@ public class AttachmentOperations {
         }
     }
 
+    /**
+     * Linear "attachments" include both actual file uploads (hosted on uploads.linear.app)
+     * and external integration links (GitHub PRs, Jam recordings, etc.).
+     * Only uploads.linear.app URLs are downloadable files.
+     */
+    private boolean isDownloadableAttachment(JiraIssueInput.AttachmentInput attachment) {
+        var url = attachment.url();
+        if (url == null || url.isBlank()) {
+            return false;
+        }
+        return url.contains("uploads.linear.app");
+    }
+
     private void addAttachmentAsComment(String jiraIssueKey, JiraIssueInput.AttachmentInput attachmentInput) {
         try {
             var currentUser = issueOperations.getCurrentUserInfo();
-            var attachmentInfo = markupFormatter.formatAttachmentForJira(attachmentInput);
-            commentOperations.addComment(jiraIssueKey, attachmentInfo, currentUser);
+            var attachmentBody = markupFormatter.formatAttachmentForJira(attachmentInput);
+            commentOperations.addComment(jiraIssueKey, attachmentBody, currentUser);
             Log.debugf("Added attachment %s info as comment to Jira issue %s", attachmentInput.id(), jiraIssueKey);
         } catch (Exception e) {
             Log.errorf(e, "Failed to add attachment %s as comment to Jira issue %s",
