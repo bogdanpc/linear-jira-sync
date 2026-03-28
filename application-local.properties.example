@@ -22,7 +22,6 @@ jira.project.key=PROJ
 
 # Optional: Sync configuration
 #sync.dry-run=true
-#sync.batch-size=50
 
 # Optional: Attachment configuration
 #attachment.sync.enabled=true

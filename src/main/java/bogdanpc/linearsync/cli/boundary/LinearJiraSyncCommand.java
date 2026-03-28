@@ -66,6 +66,7 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
     @Option(names = {"--state-dir"}, description = "Custom directory for state file storage (overrides LINEARSYNC_STORAGE_LOCATION)")
     String stateDirectory;
 
+    @SuppressWarnings("unused") // parsed pre-boot in Application.bootstrapConfigLocations; declared here so picocli accepts the flag
     @Option(names = {"--config"}, description = "Path to external configuration file (e.g., ~/.linear-jira-sync/config.properties)")
     String configFile;
 
@@ -103,7 +104,7 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
             new Thread(() -> {
                 try {
                     Thread.sleep(100); // Small delay to allow logs to flush
-                } catch (InterruptedException e) {
+                } catch (InterruptedException _) {
                     Thread.currentThread().interrupt();
                 }
                 io.quarkus.runtime.Quarkus.asyncExit();
@@ -302,12 +303,12 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
     }
 
     private Integer listIssueTypes() {
-        System.out.println("Fetching available issue types from Jira project...");
+        Log.info("Fetching available issue types from Jira project...");
 
         try {
             config.validate();
         } catch (ConfigurationException e) {
-            System.err.println("Configuration error: " + e.getMessage());
+           Log.error("Configuration error: " + e.getMessage());
             return 1;
         }
 
@@ -315,29 +316,27 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
             var issueTypes = jiraService.getProjectIssueTypes();
 
             if (issueTypes.isEmpty()) {
-                System.out.println("No issue types found for the configured project.");
+                Log.info("No issue types found for the configured project.");
                 return 0;
             }
 
-            System.out.println();
-            System.out.println("Available issue types:");
-            System.out.println();
+            Log.info("Available issue types:");
+
             for (var issueType : issueTypes) {
                 var subtaskMarker = issueType.subtask() ? " [subtask]" : "";
-                System.out.printf("  - %s%s%n", issueType.name(), subtaskMarker);
+                Log.errorf("  - %s%s%n", issueType.name(), subtaskMarker);
                 if (issueType.description() != null && !issueType.description().isBlank()) {
-                    System.out.printf("      %s%n", issueType.description());
+                    Log.errorf("      %s%n", issueType.description());
                 }
             }
 
-            System.out.println();
-            System.out.println("To configure, set environment variables:");
-            System.out.println("  JIRA_ISSUE_TYPE=<name>      (for regular issues)");
-            System.out.println("  JIRA_SUBTASK_TYPE=<name>    (for subtasks, use a [subtask] type)");
+            Log.info("To configure, set environment variables:");
+            Log.info("  JIRA_ISSUE_TYPE=<name>      (for regular issues)");
+            Log.info("  JIRA_SUBTASK_TYPE=<name>    (for subtasks, use a [subtask] type)");
 
             return 0;
         } catch (Exception e) {
-            System.err.println("Failed to fetch issue types: " + e.getMessage());
+           Log.errorf("Failed to fetch issue types: " + e.getMessage());
             return 1;
         }
     }

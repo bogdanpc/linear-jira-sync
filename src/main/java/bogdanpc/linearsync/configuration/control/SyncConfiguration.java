@@ -21,11 +21,6 @@ public class SyncConfiguration {
         this.linearConfig = linearConfig;
     }
 
-    public String linearApiToken() {
-        return linearConfig.api().token().orElseThrow(() ->
-                new ConfigurationException("Linear API token is required (LINEAR_API_TOKEN or linear.api.token)"));
-    }
-
     /**
      * Validates that all required configuration is present.
      *
