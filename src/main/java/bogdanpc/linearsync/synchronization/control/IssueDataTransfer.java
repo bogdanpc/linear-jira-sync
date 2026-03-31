@@ -15,30 +15,35 @@ import java.util.List;
 public class IssueDataTransfer {
 
     public JiraIssueInput mapToJiraIssueInput(LinearIssue linearIssue) {
+        return mapToJiraIssueInput(linearIssue, null);
+    }
+
+    public JiraIssueInput mapToJiraIssueInput(LinearIssue linearIssue, String parentJiraKey) {
         if (linearIssue == null) {
             return null;
         }
 
         return new JiraIssueInput(
-            linearIssue.id(),
-            linearIssue.identifier(),
-            linearIssue.title(),
-            linearIssue.description(),
-            linearIssue.priority(),
-            linearIssue.state() != null ? linearIssue.state().name() : null,
-            linearIssue.assignee() != null ? linearIssue.assignee().email() : null,
-            linearIssue.assignee() != null ? linearIssue.assignee().displayName() : null,
-            linearIssue.creator() != null ? linearIssue.creator().email() : null,
-            linearIssue.creator() != null ? linearIssue.creator().displayName() : null,
-            linearIssue.team() != null ? linearIssue.team().name() : null,
-            linearIssue.team() != null ? linearIssue.team().key() : null,
-            mapLabels(linearIssue),
-            mapComments(linearIssue),
-            mapAttachments(linearIssue),
-            linearIssue.createdAt(),
-            linearIssue.updatedAt(),
-            linearIssue.url()
-        );
+                linearIssue.id(),
+                linearIssue.identifier(),
+                linearIssue.title(),
+                linearIssue.description(),
+                linearIssue.priority(),
+                linearIssue.state() != null ? linearIssue.state().name() : null,
+                linearIssue.state() != null ? linearIssue.state().type() : null,
+                linearIssue.assignee() != null ? linearIssue.assignee().email() : null,
+                linearIssue.assignee() != null ? linearIssue.assignee().displayName() : null,
+                linearIssue.creator() != null ? linearIssue.creator().email() : null,
+                linearIssue.creator() != null ? linearIssue.creator().displayName() : null,
+                linearIssue.team() != null ? linearIssue.team().name() : null,
+                linearIssue.team() != null ? linearIssue.team().key() : null,
+                mapLabels(linearIssue),
+                mapComments(linearIssue),
+                mapAttachments(linearIssue),
+                linearIssue.createdAt(),
+                linearIssue.updatedAt(),
+                linearIssue.url(),
+                parentJiraKey);
     }
 
     private List<JiraIssueInput.LabelInput> mapLabels(LinearIssue linearIssue) {

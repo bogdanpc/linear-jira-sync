@@ -14,7 +14,8 @@ public record JiraIssueInput(
     String title,
     String description,
     Integer priority,
-    String state,
+    String stateName,
+    String stateType,
     String assigneeEmail,
     String assigneeDisplayName,
     String creatorEmail,
@@ -26,7 +27,8 @@ public record JiraIssueInput(
     List<AttachmentInput> attachments,
     Instant createdAt,
     Instant updatedAt,
-    String sourceUrl
+    String sourceUrl,
+    String parentJiraKey
 ) {
 
     public record LabelInput(

@@ -1,5 +1,6 @@
 package bogdanpc.linearsync.synchronization.control;
 
+import bogdanpc.linearsync.jira.control.JiraApiException;
 import bogdanpc.linearsync.linear.control.IssueOperations;
 import bogdanpc.linearsync.synchronization.entity.SyncResult;
 import io.quarkus.logging.Log;
@@ -26,7 +27,7 @@ public class Synchronizer {
 
     public SyncResult synchronizeSingleIssue(String issueIdentifier) {
         var dryRun = syncCoordinator.isDryRun();
-        Log.infof("Starting single issue synchronization - Issue: %s, DryRun: %s", issueIdentifier, dryRun);
+        Log.debugf("Single issue sync - Issue: %s, DryRun: %s", issueIdentifier, dryRun);
 
         var result = new SyncResult();
         result.startTime = Instant.now();
@@ -34,34 +35,39 @@ public class Synchronizer {
         try {
             var state = syncCoordinator.prepareSync();
 
-            var linearIssue = linearService.getIssueByIdentifier(issueIdentifier).orElseThrow();
+            var linearIssue = linearService.getIssueByIdentifier(issueIdentifier);
+            if (linearIssue.isEmpty()) {
+                result.endTime = Instant.now();
+                result.success = false;
+                result.addError("Linear issue '%s' not found. Please verify the issue identifier is correct."
+                        .formatted(issueIdentifier));
+                return result;
+            }
 
-            Log.infof("Found Linear issue: %s - %s", linearIssue.identifier(), linearIssue.title());
-
-            var issueResult = issueProcessor.processIssue(linearIssue, state, dryRun);
+            var issueResult = issueProcessor.processIssue(linearIssue.get(), state, dryRun);
             result.addIssueResult(issueResult);
 
             syncCoordinator.completeSync(state, result.hasChanges());
 
-            result.endTime = Instant.now();
             result.success = result.errors.isEmpty();
 
-            Log.infof("Single issue synchronization completed - Created: %d, Updated: %d, Skipped: %d, Errors: %d",
-                    result.createdCount, result.updatedCount, result.skippedCount, result.errors.size());
-
-        } catch (Exception e) {
-            Log.errorf(e, "Single issue synchronization failed");
-            result.endTime = Instant.now();
+        } catch (JiraApiException e) {
+            Log.warnf(e, "Jira API error during sync");
             result.success = false;
-            result.addError("Single issue synchronization failed: " + e.getMessage());
+            result.addError("Jira API error (HTTP %d): %s".formatted(e.getStatusCode(), e.getMessage()));
+        } catch (RuntimeException e) {
+            Log.warnf(e, "Sync failed");
+            result.success = false;
+            result.addError("Sync failed: " + e.getMessage());
         }
 
+        result.endTime = Instant.now();
         return result;
     }
 
     public SyncResult synchronize(String teamKey, String stateType, Instant updatedAfter, boolean forceFullSync) {
         var dryRun = syncCoordinator.isDryRun();
-        Log.infof("Starting synchronization - Team: %s, State: %s, UpdatedAfter: %s, ForceFullSync: %s, DryRun: %s",
+        Log.debugf("Sync params - Team: %s, State: %s, UpdatedAfter: %s, ForceFullSync: %s, DryRun: %s",
                 teamKey, stateType, updatedAfter, forceFullSync, dryRun);
 
         var result = new SyncResult();
@@ -72,27 +78,33 @@ public class Synchronizer {
             var effectiveUpdatedAfter = syncCoordinator.determineUpdatedAfter(state, updatedAfter, forceFullSync);
 
             var linearIssues = linearService.getIssues(teamKey, stateType, effectiveUpdatedAfter);
-            Log.infof("Found %d Linear issues to process", linearIssues.size());
 
-            linearIssues.stream()
+            var parentIssues = linearIssues.stream()
+                    .filter(issue -> issue.parent() == null)
+                    .toList();
+
+            Log.infof("Found %d issue%s (%d parent, %d children)",
+                    linearIssues.size(), linearIssues.size() == 1 ? "" : "s",
+                    parentIssues.size(), linearIssues.size() - parentIssues.size());
+
+            parentIssues.stream()
                     .map(linearIssue -> issueProcessor.processIssue(linearIssue, state, dryRun))
                     .forEach(result::addIssueResult);
 
             syncCoordinator.completeSync(state, result.hasChanges());
 
-            result.endTime = Instant.now();
             result.success = true;
-
-            Log.infof("Synchronization completed - Created: %d, Updated: %d, Skipped: %d, Errors: %d",
-                    result.createdCount, result.updatedCount, result.skippedCount, result.errors.size());
-
-        } catch (Exception e) {
-            Log.errorf(e, "Synchronization failed");
-            result.endTime = Instant.now();
+        } catch (JiraApiException e) {
+            Log.warnf(e, "Jira API error during sync");
             result.success = false;
-            result.addError("Synchronization failed: " + e.getMessage());
+            result.addError("Jira API error (HTTP %d): %s".formatted(e.getStatusCode(), e.getMessage()));
+        } catch (RuntimeException e) {
+            Log.errorf(e, "Sync failed");
+            result.success = false;
+            result.addError("Sync failed: " + e.getMessage());
         }
 
+        result.endTime = Instant.now();
         return result;
     }
 }

@@ -37,6 +37,9 @@ public class JiraCreateRequest {
         @JsonProperty("labels")
         public List<String> labels;
 
+        @JsonProperty("parent")
+        public Parent parent;
+
         // Dynamic fields for custom properties
         public Map<String, Object> customFields = new HashMap<>();
 
@@ -60,12 +63,12 @@ public class JiraCreateRequest {
 
     public record Assignee(@JsonProperty("accountId") String accountId) {}
 
+    public record Parent(@JsonProperty("key") String key) {}
 
     public record Description(
             @JsonProperty("type") String type,
             @JsonProperty("version") int version,
-            @JsonProperty("content") List<Map<String, Object>> content
-    ) {
+            @JsonProperty("content") List<Map<String, Object>> content) {
         public Description(String text) {
             this("doc", 1, List.of(
                     Map.of(
@@ -73,11 +76,7 @@ public class JiraCreateRequest {
                             "content", List.of(
                                     Map.of(
                                             "type", "text",
-                                            "text", text != null ? text : ""
-                                    )
-                            )
-                    )
-            ));
+                                            "text", text != null ? text : "")))));
         }
     }
 }

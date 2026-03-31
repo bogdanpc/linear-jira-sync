@@ -31,24 +31,40 @@ public class AttachmentDownloader {
     }
 
     public Optional<File> downloadAttachment(String attachmentId, String attachmentUrl, String filename) {
-        if (attachmentId == null || attachmentId.trim().isEmpty()) {
-            Log.warnf("Invalid attachment ID provided: %s", attachmentId);
+        if (!isValidAttachmentRequest(attachmentId, attachmentUrl)) {
             return Optional.empty();
         }
 
-        if (attachmentUrl == null || attachmentUrl.trim().isEmpty()) {
-            Log.warnf("No URL provided for attachment %s", attachmentId);
+        Log.debugf("Downloading attachment %s from %s", attachmentId, attachmentUrl);
+
+        var response = sendRequest(attachmentId, attachmentUrl);
+        if (response.isEmpty()) {
             return Optional.empty();
         }
 
-        if (!isValidUrl(attachmentUrl)) {
-            Log.warnf("Invalid URL format for attachment %s: %s", attachmentId, attachmentUrl);
+        var maxSize = attachmentConfig.download().maxSize();
+        var contentLength = response.get().headers().firstValueAsLong("content-length");
+        if (contentLength.isPresent() && contentLength.getAsLong() > maxSize) {
+            Log.warnf("Attachment %s is too large (%d bytes). Max allowed: %d bytes",
+                     attachmentId, contentLength.getAsLong(), maxSize);
             return Optional.empty();
         }
 
         try {
-            Log.debugf("Downloading attachment %s from %s", attachmentId, attachmentUrl);
+            var tempFile = createTempFile(filename);
+            if (writeToFile(response.get().body(), tempFile, attachmentId)) {
+                Log.debugf("Successfully downloaded attachment %s to %s", attachmentId, tempFile.getAbsolutePath());
+                return Optional.of(tempFile);
+            }
+            return Optional.empty();
+        } catch (IOException e) {
+            Log.errorf(e, "Failed to create temp file for attachment %s", attachmentId);
+            return Optional.empty();
+        }
+    }
 
+    private Optional<HttpResponse<InputStream>> sendRequest(String attachmentId, String attachmentUrl) {
+        try {
             var request = buildRequest(attachmentUrl);
             var response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
 
@@ -57,24 +73,13 @@ public class AttachmentDownloader {
                 return Optional.empty();
             }
 
-            var maxSize = attachmentConfig.download().maxSize();
-            var contentLength = response.headers().firstValueAsLong("content-length");
-            if (contentLength.isPresent() && contentLength.getAsLong() > maxSize) {
-                Log.warnf("Attachment %s is too large (%d bytes). Max allowed: %d bytes",
-                         attachmentId, contentLength.getAsLong(), maxSize);
-                return Optional.empty();
-            }
-
-            var tempFile = createTempFile(filename);
-            if (writeToFile(response.body(), tempFile, attachmentId)) {
-                Log.debugf("Successfully downloaded attachment %s to %s", attachmentId, tempFile.getAbsolutePath());
-                return Optional.of(tempFile);
-            } else {
-                return Optional.empty();
-            }
-
-        } catch (Exception e) {
+            return Optional.of(response);
+        } catch (IOException e) {
             Log.errorf(e, "Failed to download attachment %s from %s", attachmentId, attachmentUrl);
+            return Optional.empty();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            Log.errorf(e, "Download interrupted for attachment %s from %s", attachmentId, attachmentUrl);
             return Optional.empty();
         }
     }
@@ -110,7 +115,7 @@ public class AttachmentDownloader {
                 totalBytes += bytesRead;
                 if (totalBytes > attachmentConfig.download().maxSize()) {
                     Log.warnf("Attachment %s exceeded max size during download. Aborting.", attachmentId);
-                    tempFile.delete();
+                    Files.delete(tempFile.toPath());
                     return false;
                 }
                 fos.write(buffer, 0, bytesRead);
@@ -122,7 +127,7 @@ public class AttachmentDownloader {
         } catch (IOException e) {
             Log.errorf(e, "Failed to write attachment %s to file %s", attachmentId, tempFile.getAbsolutePath());
             if (tempFile.exists()) {
-                tempFile.delete();
+                 tempFile.delete();
             }
             return false;
         }
@@ -159,10 +164,29 @@ public class AttachmentDownloader {
                 } else {
                     Log.warnf("Failed to delete temporary file: %s", tempFile.getAbsolutePath());
                 }
-            } catch (Exception e) {
+            } catch (SecurityException e) {
                 Log.warnf(e, "Error cleaning up temporary file: %s", tempFile.getAbsolutePath());
             }
         }
+    }
+
+    private boolean isValidAttachmentRequest(String attachmentId, String attachmentUrl) {
+        if (attachmentId == null || attachmentId.trim().isEmpty()) {
+            Log.warnf("Invalid attachment ID provided: %s", attachmentId);
+            return false;
+        }
+
+        if (attachmentUrl == null || attachmentUrl.trim().isEmpty()) {
+            Log.warnf("No URL provided for attachment %s", attachmentId);
+            return false;
+        }
+
+        if (!isValidUrl(attachmentUrl)) {
+            Log.warnf("Invalid URL format for attachment %s: %s", attachmentId, attachmentUrl);
+            return false;
+        }
+
+        return true;
     }
 
     private boolean isValidUrl(String url) {

@@ -1,0 +1,9 @@
+{
+  "request": {
+    "url": "/jira/rest/api/3/issue/TEST-123/transitions",
+    "method": "POST"
+  },
+  "response": {
+    "status": 204
+  }
+}

@@ -1,10 +1,6 @@
 package bogdanpc.linearsync.jira.control;
 
-import bogdanpc.linearsync.jira.entity.JiraComment;
-import bogdanpc.linearsync.jira.entity.JiraCreateRequest;
-import bogdanpc.linearsync.jira.entity.JiraIssue;
-import bogdanpc.linearsync.jira.entity.JiraIssueInput;
-import bogdanpc.linearsync.jira.entity.JiraProject;
+import bogdanpc.linearsync.jira.entity.*;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
@@ -14,13 +10,16 @@ public class IssueOperations {
 
     private final JiraClient jiraClient;
     private final IssueFieldMapper issueFieldMapper;
+    private final MarkupFormatter markupFormatter;
     private final JiraConfig config;
 
     private String cachedSubtaskType;
 
-    IssueOperations(@RestClient JiraClient jiraClient, IssueFieldMapper issueFieldMapper, JiraConfig config) {
+    IssueOperations(@RestClient JiraClient jiraClient, IssueFieldMapper issueFieldMapper,
+                    MarkupFormatter markupFormatter, JiraConfig config) {
         this.jiraClient = jiraClient;
         this.issueFieldMapper = issueFieldMapper;
+        this.markupFormatter = markupFormatter;
         this.config = config;
     }
 
@@ -29,28 +28,19 @@ public class IssueOperations {
 
         var request = buildCreateRequest(issueInput);
 
-        try {
-            var createdIssue = jiraClient.createIssue(request);
-            Log.infof("Created Jira issue: %s", createdIssue.key());
-            return createdIssue;
-        } catch (Exception e) {
-            Log.errorf(e, "Failed to create Jira issue for source issue: %s", issueInput.sourceIdentifier());
-            throw new RuntimeException("Failed to create Jira issue", e);
-        }
+        var createdIssue = jiraClient.createIssue(request);
+        Log.infof("Created Jira issue: %s", createdIssue.key());
+        return createdIssue;
     }
+
 
     public void updateIssue(String jiraIssueKey, JiraIssueInput issueInput) {
         Log.infof("Updating Jira issue: %s", jiraIssueKey);
 
         var request = buildUpdateRequest(issueInput);
 
-        try {
-            jiraClient.updateIssue(jiraIssueKey, request);
-            Log.infof("Updated Jira issue: %s", jiraIssueKey);
-        } catch (Exception e) {
-            Log.errorf(e, "Failed to update Jira issue: %s", jiraIssueKey);
-            throw new RuntimeException("Failed to update Jira issue", e);
-        }
+        jiraClient.updateIssue(jiraIssueKey, request);
+        Log.infof("Updated Jira issue: %s", jiraIssueKey);
     }
 
     public boolean testConnection() {
@@ -67,8 +57,9 @@ public class IssueOperations {
     JiraComment.JiraUser getCurrentUserInfo() {
         try {
             var userInfo = jiraClient.getCurrentUser();
-            return new JiraComment.JiraUser(userInfo.accountId(), userInfo.displayName(), userInfo.emailAddress(), true, null);
-        } catch (Exception e) {
+            return new JiraComment.JiraUser(userInfo.accountId(), userInfo.displayName(), userInfo.emailAddress(), true,
+                    null);
+        } catch (JiraApiException e) {
             Log.errorf(e, "Failed to get current user info");
             // Return a fallback user
             return new JiraComment.JiraUser("unknown", "System", "system@example.com", true, null);
@@ -76,13 +67,14 @@ public class IssueOperations {
     }
 
     private JiraCreateRequest buildCreateRequest(JiraIssueInput issueInput) {
-        var projectKey = config.projectKey().orElseThrow(() -> new IllegalStateException("Jira project key not configured"));
+        var projectKey = config.projectKey()
+                .orElseThrow(() -> new IllegalStateException("Jira project key not configured"));
 
         var request = new JiraCreateRequest();
         request.fields = new JiraCreateRequest.Fields();
         request.fields.project = new JiraCreateRequest.Project(projectKey);
         request.fields.summary = String.format("[%s] %s", issueInput.sourceIdentifier(), issueInput.title());
-        request.fields.description = new JiraCreateRequest.Description(issueInput.description());
+        request.fields.description = markupFormatter.markdownToAdf(issueInput.description());
 
         // Determine issue type based on whether this is a subtask
         var isSubtask = issueInput.parentJiraKey() != null && !issueInput.parentJiraKey().isEmpty();
@@ -107,10 +99,12 @@ public class IssueOperations {
             return cachedSubtaskType;
         }
 
-        var projectKey = config.projectKey().orElseThrow(() -> new IllegalStateException("Jira project key not configured"));
+        var projectKey = config.projectKey()
+                .orElseThrow(() -> new IllegalStateException("Jira project key not configured"));
         var project = jiraClient.getProject(projectKey);
         if (project.issueTypes() != null) {
-            cachedSubtaskType = project.issueTypes().stream()
+            cachedSubtaskType = project.issueTypes()
+                    .stream()
                     .filter(JiraProject.IssueType::subtask)
                     .map(JiraProject.IssueType::name)
                     .findFirst()
@@ -127,7 +121,7 @@ public class IssueOperations {
         var request = new JiraCreateRequest();
         request.fields = new JiraCreateRequest.Fields();
         request.fields.summary = String.format("[%s] %s", issueInput.sourceIdentifier(), issueInput.title());
-        request.fields.description = new JiraCreateRequest.Description(issueInput.description());
+        request.fields.description = markupFormatter.markdownToAdf(issueInput.description());
 
         issueFieldMapper.mapPriorityIfEnabled(issueInput, request);
         issueFieldMapper.mapLabels(issueInput, request);

@@ -45,3 +45,4 @@ application-local.properties
 /.quarkus/cli/plugins/
 # TLS Certificates
 .certs/
+.current/

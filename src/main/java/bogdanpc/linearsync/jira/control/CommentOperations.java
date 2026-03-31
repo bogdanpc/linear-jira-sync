@@ -8,6 +8,8 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 @ApplicationScoped
 public class CommentOperations {
@@ -25,18 +27,10 @@ public class CommentOperations {
         this.issueOperations = issueOperations;
     }
 
-    JiraComment addComment(String jiraIssueKey, String commentText, JiraComment.JiraUser author) {
-        Log.infof("Adding comment to Jira issue: %s", jiraIssueKey);
-
-        try {
-            var comment = JiraComment.createFromText(commentText, author);
-            var createdComment = jiraClient.addComment(jiraIssueKey, comment);
-            Log.debugf("Successfully added comment to Jira issue: %s", jiraIssueKey);
-            return createdComment;
-        } catch (Exception e) {
-            Log.errorf(e, "Failed to add comment to Jira issue: %s", jiraIssueKey);
-            throw new RuntimeException("Failed to add comment to Jira issue", e);
-        }
+    JiraComment addComment(String jiraIssueKey, JiraComment.JiraContent body) {
+        Log.debugf("Adding comment to Jira issue: %s", jiraIssueKey);
+        var comment = JiraComment.createFromContent(body, issueOperations.getCurrentUserInfo());
+        return jiraClient.addComment(jiraIssueKey, comment);
     }
 
     public void syncComments(String jiraIssueKey, JiraIssueInput issueInput) {
@@ -45,28 +39,49 @@ public class CommentOperations {
             return;
         }
 
-        Log.infof("Syncing %d comments from source issue %s to Jira issue %s", issueInput.comments().size(), issueInput.sourceIdentifier(), jiraIssueKey);
+        Log.infof("Syncing %d comments from source issue %s to Jira issue %s", issueInput.comments().size(),
+                issueInput.sourceIdentifier(), jiraIssueKey);
 
         var existingComments = searchOperations.getComments(jiraIssueKey);
         var existingCommentTexts = extractExistingCommentTexts(existingComments);
-        var currentUser = issueOperations.getCurrentUserInfo();
 
-        for (var commentInput : issueInput.comments()) {
-            try {
-                var commentText = markupFormatter.formatCommentForJira(commentInput);
+        issueInput.comments().stream()
+                .filter(c -> !isCommentAlreadySynced(c, existingCommentTexts))
+                .forEach(c -> addComment(jiraIssueKey, markupFormatter.formatCommentForJira(c)));
+    }
 
-                if (isCommentAlreadyExists(commentText, existingCommentTexts)) {
-                    Log.debugf("Comment already exists, skipping: %s", commentInput.id());
-                    continue;
+    private static final Pattern IMAGE_PATTERN = Pattern.compile("!\\[[^]]*]\\([^)]+\\)");
+
+    /**
+     * Detects already-synced comments by matching body text or author+timestamp
+     * against existing Jira comment text. Handles both old (plain text) and
+     * new (ADF) format comments.
+     */
+    private boolean isCommentAlreadySynced(JiraIssueInput.CommentInput comment, Set<String> existingTexts) {
+        var bodyText = comment.body() != null
+                ? IMAGE_PATTERN.matcher(comment.body()).replaceAll("").strip()
+                : "";
+
+        if (!bodyText.isEmpty()) {
+            var normalizedBody = bodyText.replaceAll("\\s+", " ");
+            for (var existing : existingTexts) {
+                if (existing.contains(normalizedBody)) {
+                    return true;
                 }
-
-                addComment(jiraIssueKey, commentText, currentUser);
-                existingCommentTexts.add(commentText.trim());
-
-            } catch (Exception e) {
-                Log.errorf(e, "Failed to sync comment %s from source issue %s", commentInput.id(), issueInput.sourceIdentifier());
             }
         }
+
+        var author = comment.authorDisplayName() != null ? comment.authorDisplayName() : comment.authorName();
+        if (author != null && comment.createdAt() != null) {
+            var isoTimestamp = comment.createdAt().toString();
+            for (var existing : existingTexts) {
+                if (existing.contains(author) && existing.contains(isoTimestamp)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private HashSet<String> extractExistingCommentTexts(List<JiraComment> existingComments) {
@@ -80,9 +95,5 @@ public class CommentOperations {
         }
 
         return existingCommentTexts;
-    }
-
-    private boolean isCommentAlreadyExists(String commentText, HashSet<String> existingCommentTexts) {
-        return existingCommentTexts.contains(commentText.trim());
     }
 }

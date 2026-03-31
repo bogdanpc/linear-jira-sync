@@ -29,11 +29,6 @@ class SyncStateRepositoryTest {
             }
 
             @Override
-            public int batchSize() {
-                return 50;
-            }
-
-            @Override
             public Storage storage() {
                 return new Storage() {
                     @Override

@@ -1,0 +1,30 @@
+{
+  "transitions": [
+    {
+      "id": "21",
+      "name": "In Progress",
+      "to": {
+        "id": "3",
+        "name": "In Progress",
+        "statusCategory": {
+          "id": "4",
+          "name": "In Progress",
+          "colorName": "yellow"
+        }
+      }
+    },
+    {
+      "id": "31",
+      "name": "Done",
+      "to": {
+        "id": "5",
+        "name": "Done",
+        "statusCategory": {
+          "id": "3",
+          "name": "Done",
+          "colorName": "green"
+        }
+      }
+    }
+  ]
+}

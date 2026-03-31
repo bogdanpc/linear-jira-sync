@@ -19,20 +19,17 @@ public class AttachmentOperations {
     private final JiraClient jiraClient;
     private final MarkupFormatter markupFormatter;
     private final CommentOperations commentOperations;
-    private final IssueOperations issueOperations;
     private final AttachmentDownloader attachmentDownloader;
     private final AttachmentConfig attachmentConfig;
 
     AttachmentOperations(@RestClient JiraClient jiraClient,
                          MarkupFormatter markupFormatter,
                          CommentOperations commentOperations,
-                         IssueOperations issueOperations,
                          AttachmentDownloader attachmentDownloader,
                          AttachmentConfig attachmentConfig) {
         this.jiraClient = jiraClient;
         this.markupFormatter = markupFormatter;
         this.commentOperations = commentOperations;
-        this.issueOperations = issueOperations;
         this.attachmentDownloader = attachmentDownloader;
         this.attachmentConfig = attachmentConfig;
     }
@@ -155,11 +152,10 @@ public class AttachmentOperations {
 
     private void addAttachmentAsComment(String jiraIssueKey, JiraIssueInput.AttachmentInput attachmentInput) {
         try {
-            var currentUser = issueOperations.getCurrentUserInfo();
             var attachmentBody = markupFormatter.formatAttachmentForJira(attachmentInput);
-            commentOperations.addComment(jiraIssueKey, attachmentBody, currentUser);
+            commentOperations.addComment(jiraIssueKey, attachmentBody);
             Log.debugf("Added attachment %s info as comment to Jira issue %s", attachmentInput.id(), jiraIssueKey);
-        } catch (Exception e) {
+        } catch (JiraApiException e) {
             Log.errorf(e, "Failed to add attachment %s as comment to Jira issue %s",
                     attachmentInput.id(), jiraIssueKey);
         }

@@ -1,0 +1,13 @@
+{
+  "request": {
+    "url": "/jira/rest/api/3/issue/TEST-123/transitions",
+    "method": "GET"
+  },
+  "response": {
+    "status": 200,
+    "bodyFileName": "jira-transitions-test123.json",
+    "headers": {
+      "Content-Type": "application/json"
+    }
+  }
+}

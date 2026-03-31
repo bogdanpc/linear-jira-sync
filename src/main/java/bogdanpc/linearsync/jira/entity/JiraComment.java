@@ -1,9 +1,11 @@
 package bogdanpc.linearsync.jira.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
@@ -26,23 +28,35 @@ public record JiraComment(
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public record JiraContentNode(
             @JsonProperty("content") List<JiraTextNode> content,
-            @JsonProperty("type") String type
-    ) {}
+            @JsonProperty("type") String type,
+            @JsonProperty("attrs") Map<String, Object> attrs) {
+    }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     public record JiraTextNode(
             @JsonProperty("text") String text,
-            @JsonProperty("type") String type
-    ) {}
+            @JsonProperty("type") String type,
+            @JsonProperty("marks") List<JiraMark> marks,
+            @JsonProperty("attrs") Map<String, String> attrs) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public record JiraMark(
+            @JsonProperty("type") String type,
+            @JsonProperty("attrs") Map<String, String> attrs) {
+    }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record JiraVisibility(
             @JsonProperty("type") String type,
             @JsonProperty("value") String value,
-            @JsonProperty("identifier") String identifier
-    ) {}
+            @JsonProperty("identifier") String identifier) {
+    }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record JiraUser(
@@ -50,14 +64,10 @@ public record JiraComment(
             @JsonProperty("displayName") String displayName,
             @JsonProperty("emailAddress") String emailAddress,
             @JsonProperty("active") Boolean active,
-            @JsonProperty("self") String self
-    ) {}
+            @JsonProperty("self") String self) {
+    }
 
-    public static JiraComment createFromText(String text, JiraUser author) {
-        var textNode = new JiraTextNode(text, "text");
-        var contentNode = new JiraContentNode(List.of(textNode), "paragraph");
-        var body = new JiraContent(List.of(contentNode), "doc", 1);
-
+    public static JiraComment createFromContent(JiraContent body, JiraUser author) {
         return new JiraComment(null, author, body, null, null, null, null);
     }
 

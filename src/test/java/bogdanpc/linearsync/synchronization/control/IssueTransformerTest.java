@@ -1,15 +1,14 @@
 package bogdanpc.linearsync.synchronization.control;
 
+import static org.junit.jupiter.api.Assertions.*;
+
 import bogdanpc.linearsync.jira.entity.JiraIssue;
 import bogdanpc.linearsync.linear.entity.LinearIssue;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import org.junit.jupiter.api.Test;
-
 import java.time.Instant;
 import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 class IssueTransformerTest {
@@ -60,21 +59,23 @@ class IssueTransformerTest {
     void testMapLinearToJiraCreateRequest_MinimalIssue() {
         // Arrange - minimal Linear issue
         var linearIssue = new LinearIssue(
-                "linear-minimal",
-                "MIN-1",
-                "Minimal Issue",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
+            "linear-minimal",
+            "MIN-1",
+            "Minimal Issue",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null, // parent
+            null, // children
+            null,
+            null,
+            null
         );
 
         // Act
@@ -125,21 +126,23 @@ class IssueTransformerTest {
     void testShouldUpdateJiraIssue_NoUpdatedAt() {
         // Arrange
         var linearIssue = new LinearIssue(
-                "linear-123",
-                "ENG-123",
-                "Test Issue",
-                "Description",
-                2,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null, // updatedAt is null
-                "https://linear.app/test/issue/ENG-123"
+            "linear-123",
+            "ENG-123",
+            "Test Issue",
+            "Description",
+            2,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null, // parent
+            null, // children
+            null,
+            null, // updatedAt is null
+            "https://linear.app/test/issue/ENG-123"
         );
 
         var jiraIssue = createTestJiraIssue("[ENG-123] Different Title");
@@ -153,13 +156,13 @@ class IssueTransformerTest {
 
     @Test
     void testMapLinearStatusToJira() {
+        // Linear state types: triage, backlog, unstarted, started, completed, canceled
         assertEquals("To Do", issueTransformer.mapLinearStatusToJira("triage"));
         assertEquals("To Do", issueTransformer.mapLinearStatusToJira("backlog"));
-        assertEquals("To Do", issueTransformer.mapLinearStatusToJira("todo"));
-        assertEquals("In Progress", issueTransformer.mapLinearStatusToJira("in_progress"));
-        assertEquals("In Review", issueTransformer.mapLinearStatusToJira("in_review"));
-        assertEquals("Done", issueTransformer.mapLinearStatusToJira("done"));
-        assertEquals("Cancelled", issueTransformer.mapLinearStatusToJira("canceled"));
+        assertEquals("To Do", issueTransformer.mapLinearStatusToJira("unstarted"));
+        assertEquals("In Progress", issueTransformer.mapLinearStatusToJira("started"));
+        assertEquals("Done", issueTransformer.mapLinearStatusToJira("completed"));
+        assertEquals("Done", issueTransformer.mapLinearStatusToJira("canceled"));
         assertEquals("To Do", issueTransformer.mapLinearStatusToJira("unknown_status"));
     }
 
@@ -185,10 +188,23 @@ class IssueTransformerTest {
         var labels = new LinearIssue.LinearLabels(List.of(label1, label2, label3));
 
         var linearIssue = new LinearIssue(
-                "linear-123", "ENG-123", "Test Issue", "Description", 2,
-                state, null, null, team, labels,
-                null, null,
-                Instant.now(), Instant.now(), "https://linear.app/test/issue/ENG-123"
+            "linear-123",
+            "ENG-123",
+            "Test Issue",
+            "Description",
+            2,
+            state,
+            null,
+            null,
+            team,
+            labels,
+            null,
+            null,
+            null, // parent
+            null, // children
+            Instant.now(),
+            Instant.now(),
+            "https://linear.app/test/issue/ENG-123"
         );
 
         // Act
@@ -212,10 +228,23 @@ class IssueTransformerTest {
         var labels = new LinearIssue.LinearLabels(List.of()); // Empty list
 
         var linearIssue = new LinearIssue(
-                "linear-123", "ENG-123", "Test Issue", "Description", 2,
-                state, null, null, team, labels,
-                null, null,
-                Instant.now(), Instant.now(), "https://linear.app/test/issue/ENG-123"
+            "linear-123",
+            "ENG-123",
+            "Test Issue",
+            "Description",
+            2,
+            state,
+            null,
+            null,
+            team,
+            labels,
+            null,
+            null,
+            null, // parent
+            null, // children
+            Instant.now(),
+            Instant.now(),
+            "https://linear.app/test/issue/ENG-123"
         );
 
         // Act
@@ -237,10 +266,23 @@ class IssueTransformerTest {
         var labels = new LinearIssue.LinearLabels(List.of(validLabel, nullLabel));
 
         var linearIssue = new LinearIssue(
-                "linear-123", "ENG-123", "Test Issue", "Description", 2,
-                state, null, null, team, labels,
-                null, null,
-                Instant.now(), Instant.now(), "https://linear.app/test/issue/ENG-123"
+            "linear-123",
+            "ENG-123",
+            "Test Issue",
+            "Description",
+            2,
+            state,
+            null,
+            null,
+            team,
+            labels,
+            null,
+            null,
+            null, // parent
+            null, // children
+            Instant.now(),
+            Instant.now(),
+            "https://linear.app/test/issue/ENG-123"
         );
 
         // Act
@@ -254,85 +296,59 @@ class IssueTransformerTest {
 
     private LinearIssue createTestLinearIssue() {
         // State
-        var state = new LinearIssue.LinearState(
-                "state-1",
-                "In Progress",
-                "started"
-        );
+        var state = new LinearIssue.LinearState("state-1", "In Progress", "started");
 
         // Team
-        var team = new LinearIssue.LinearTeam(
-                "team-1",
-                "Engineering",
-                "ENG"
-        );
+        var team = new LinearIssue.LinearTeam("team-1", "Engineering", "ENG");
 
         // Creator
-        var creator = new LinearIssue.LinearUser(
-                "user-1",
-                "Test User",
-                "test@example.com",
-                "Test User"
-        );
+        var creator = new LinearIssue.LinearUser("user-1", "Test User", "test@example.com", "Test User");
 
         // Assignee
-        var assignee = new LinearIssue.LinearUser(
-                "user-2",
-                "Assigned User",
-                "assigned@example.com",
-                "Assigned User"
-        );
+        var assignee = new LinearIssue.LinearUser("user-2", "Assigned User", "assigned@example.com", "Assigned User");
 
         // Labels
-        var bugLabel = new LinearIssue.LinearLabel(
-                "label-1",
-                "bug",
-                "#ff0000"
-        );
+        var bugLabel = new LinearIssue.LinearLabel("label-1", "bug", "#ff0000");
 
-        var featureLabel = new LinearIssue.LinearLabel(
-                "label-2",
-                "feature",
-                "#00ff00"
-        );
+        var featureLabel = new LinearIssue.LinearLabel("label-2", "feature", "#00ff00");
 
-        var labels = new LinearIssue.LinearLabels(
-                List.of(bugLabel, featureLabel)
-        );
+        var labels = new LinearIssue.LinearLabels(List.of(bugLabel, featureLabel));
 
         return new LinearIssue(
-                "linear-123",
-                "ENG-123",
-                "Test Issue",
-                "This is a test description\nwith multiple lines.",
-                2, // High priority
-                state,
-                assignee,
-                creator,
-                team,
-                labels,
-                null,
-                null,
-                Instant.parse("2024-01-01T10:00:00Z"),
-                Instant.parse("2024-01-02T10:00:00Z"),
-                "https://linear.app/test/issue/ENG-123"
+            "linear-123",
+            "ENG-123",
+            "Test Issue",
+            "This is a test description\nwith multiple lines.",
+            2, // High priority
+            state,
+            assignee,
+            creator,
+            team,
+            labels,
+            null,
+            null,
+            null, // parent
+            null, // children
+            Instant.parse("2024-01-01T10:00:00Z"),
+            Instant.parse("2024-01-02T10:00:00Z"),
+            "https://linear.app/test/issue/ENG-123"
         );
     }
 
     private JiraIssue createTestJiraIssue(String summary) {
         var fields = new JiraIssue.JiraFields(
-                summary, // summary
-                null, // description
-                null, // issuetype
-                null, // priority
-                null, // status
-                null, // assignee
-                null, // reporter
-                null, // project
-                null, // labels
-                null, // created
-                null, // updated
-                null  // linearIssueId
+            summary, // summary
+            null, // description
+            null, // issuetype
+            null, // priority
+            null, // status
+            null, // assignee
+            null, // reporter
+            null, // project
+            null, // labels
+            null, // created
+            null, // updated
+            null // linearIssueId
         );
 
         return new JiraIssue("12345", "JIRA-123", "https://test.atlassian.net/rest/api/3/issue/12345", fields);

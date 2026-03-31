@@ -1,42 +1,46 @@
 package bogdanpc.linearsync.synchronization.control;
 
+import bogdanpc.linearsync.jira.control.JiraConfig;
 import bogdanpc.linearsync.jira.entity.JiraCreateRequest;
 import bogdanpc.linearsync.jira.entity.JiraIssue;
 import bogdanpc.linearsync.linear.entity.LinearIssue;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
+
 import java.util.Map;
-import java.util.Optional;
 
 @ApplicationScoped
 public class IssueTransformer {
 
-    @ConfigProperty(name = "jira.custom-field.linear-id", defaultValue = "")
-    Optional<String> linearIdCustomField;
+    private final JiraConfig jiraConfig;
 
-    @ConfigProperty(name = "jira.enable-priority", defaultValue = "false")
-    boolean enablePriority;
+    IssueTransformer(JiraConfig jiraConfig) {
+        this.jiraConfig = jiraConfig;
+    }
 
     public static final String TO_DO = "To Do";
-    // Status mapping from Linear to Jira
+    private static final String IN_PROGRESS = "In Progress";
+    private static final String DONE = "Done";
+
+    /**
+     * Maps Linear workflow state types to Jira status names.
+     * Linear state types: triage, backlog, unstarted, started, completed, canceled
+     */
     private static final Map<String, String> STATUS_MAPPING = Map.of(
-        "triage", TO_DO,
-        "backlog", TO_DO,
-        "todo", TO_DO,
-        "in_progress", "In Progress",
-        "in_review", "In Review",
-        "done", "Done",
-        "canceled", "Cancelled"
-    );
-    
+            "triage", TO_DO,
+            "backlog", TO_DO,
+            "unstarted", TO_DO,
+            "started", IN_PROGRESS,
+            "completed", DONE,
+            "canceled", DONE);
+
     // Priority mapping from Linear (0-4) to Jira
     private static final Map<Integer, String> PRIORITY_MAPPING = Map.of(
-        0, "Medium",     // No priority -> Medium
-        1, "Highest",    // Urgent -> Highest
-        2, "High",       // High -> High
-        3, "Medium",     // Normal -> Medium
-        4, "Low"         // Low -> Low
+            0, "Medium", // No priority -> Medium
+            1, "Highest", // Urgent -> Highest
+            2, "High", // High -> High
+            3, "Medium", // Normal -> Medium
+            4, "Low" // Low -> Low
     );
     
     public JiraCreateRequest mapLinearToJiraCreateRequest(LinearIssue linearIssue, String jiraProjectKey, String issueType) {
@@ -52,7 +56,7 @@ public class IssueTransformer {
         request.fields.issuetype = new JiraCreateRequest.IssueType(issueType);
         
         // Priority mapping (only if enabled)
-        if (enablePriority && linearIssue.priority() != null) {
+        if (jiraConfig.priorityEnabled() && linearIssue.priority() != null) {
             var jiraPriority = PRIORITY_MAPPING.getOrDefault(linearIssue.priority(), "Medium");
             request.fields.priority = new JiraCreateRequest.Priority(jiraPriority);
         }
@@ -64,10 +68,10 @@ public class IssueTransformer {
                     .filter(label -> !label.isEmpty())
                     .toList();
         }
-        
+
         // Store Linear issue ID in custom field if configured
-        if (linearIdCustomField.isPresent() && !linearIdCustomField.get().isEmpty()) {
-            request.fields.setCustomField(linearIdCustomField.get(), linearIssue.id());
+        if (jiraConfig.hasLinearIdField()) {
+            request.fields.setCustomField(jiraConfig.linearIdFieldName(), linearIssue.id());
         }
         
         return request;

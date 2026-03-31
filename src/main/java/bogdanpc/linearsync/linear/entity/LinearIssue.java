@@ -22,6 +22,8 @@ public record LinearIssue(
     @JsonProperty("labels") @JsonDeserialize(using = LinearLabelsDeserializer.class) LinearLabels labels,
     @JsonProperty("comments") LinearComments comments,
     @JsonProperty("attachments") LinearAttachments attachments,
+    @JsonProperty("parent") LinearParent parent,
+    @JsonProperty("children") LinearChildren children,
     @JsonProperty("createdAt") Instant createdAt,
     @JsonProperty("updatedAt") Instant updatedAt,
     @JsonProperty("url") String url
@@ -107,4 +109,31 @@ public record LinearIssue(
         @JsonProperty("hasNextPage") boolean hasNextPage,
         @JsonProperty("endCursor") String endCursor
     ) {}
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record LinearParent(
+            @JsonProperty("id") String id,
+            @JsonProperty("identifier") String identifier,
+            @JsonProperty("title") String title) {
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record LinearChildren(
+            @JsonProperty("nodes") List<LinearChild> nodes,
+            @JsonProperty("pageInfo") LinearPageInfo pageInfo) {
+        public static LinearChildren empty() {
+            return new LinearChildren(List.of(), new LinearPageInfo(false, null));
+        }
+
+        public List<LinearChild> getNodes() {
+            return nodes != null ? nodes : List.of();
+        }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record LinearChild(
+            @JsonProperty("id") String id,
+            @JsonProperty("identifier") String identifier,
+            @JsonProperty("title") String title) {
+    }
 }

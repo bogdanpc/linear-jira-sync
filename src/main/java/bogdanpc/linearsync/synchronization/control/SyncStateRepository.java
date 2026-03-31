@@ -119,16 +119,19 @@ public class SyncStateRepository {
             if (sortedBackups.size() <= maxBackups) {
                 return;
             }
-            for (int i = maxBackups; i < sortedBackups.size(); i++) {
-                try {
-                    Files.delete(sortedBackups.get(i));
-                    Log.debugf("Deleted old backup: %s", sortedBackups.get(i));
-                } catch (IOException e) {
-                    Log.warnf(e, "Failed to delete old backup: %s", sortedBackups.get(i));
-                }
-            }
+            sortedBackups.forEach(SyncStateRepository::deleteFile);
+
         } catch (IOException e) {
             Log.warnf(e, "Failed to rotate backups in directory: %s", backupDir);
+        }
+    }
+
+    private static void deleteFile(Path f) {
+        try {
+            Files.delete(f);
+            Log.debugf("Deleted old backup: %s", f);
+        } catch (IOException e) {
+            Log.warnf(e, "Failed to delete old backup: %s", f);
         }
     }
 
