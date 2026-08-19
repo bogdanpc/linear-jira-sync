@@ -22,7 +22,7 @@ public class Application implements QuarkusApplication {
         return new CommandLine(command, factory).execute(args);
     }
 
-    static void main(String... args) {
+    public static void main(String... args) {
         bootstrapConfigLocations(args);
         Quarkus.run(Application.class, args);
     }

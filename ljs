@@ -1,0 +1,29 @@
+#!/usr/bin/env zsh
+
+# ljs - Linear-Jira Sync launcher
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-${(%):-%x}}")" && pwd)"
+
+APP_DIR="$SCRIPT_DIR/target/quarkus-app"
+APP_JAR="quarkus-run.jar"
+AOT_CACHE="$APP_DIR/app.aot"
+
+if [[ ! -f "$APP_DIR/$APP_JAR" ]]; then
+    echo "Application not built. Run ./mvnw package first." >&2
+    exit 1
+fi
+
+# Parse command line arguments
+ACTION="${1:-sync}"
+shift || true
+
+cd "$APP_DIR"
+if [[ -f "$AOT_CACHE" ]]; then
+    java -XX:+UseCompactObjectHeaders -XX:AOTCache="$AOT_CACHE" -jar "$APP_JAR" "$ACTION" "$@"
+else
+    echo "Note: running without AOT cache (slower startup)." >&2
+    echo "      Build it with: ./build-aot.sh" >&2
+    java -XX:+UseCompactObjectHeaders -jar "$APP_JAR" "$ACTION" "$@"
+fi

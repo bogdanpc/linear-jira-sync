@@ -46,3 +46,4 @@ application-local.properties
 # TLS Certificates
 .certs/
 .current/
+/current/

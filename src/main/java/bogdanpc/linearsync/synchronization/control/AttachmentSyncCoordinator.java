@@ -22,9 +22,6 @@ public class AttachmentSyncCoordinator {
             return;
         }
 
-        Log.debugf("Filtering %d attachments for Linear issue %s based on sync state",
-                  issueInput.attachments().size(), linearIssue.identifier());
-
         var unsyncedAttachments = issueInput.attachments().stream()
                 .filter(attachment -> !state.isAttachmentAlreadySynced(linearIssue.id(), attachment.id()))
                 .toList();
@@ -35,43 +32,16 @@ public class AttachmentSyncCoordinator {
         }
 
         Log.infof("Syncing %d new attachments for Linear issue %s to Jira issue %s",
-                 unsyncedAttachments.size(), linearIssue.identifier(), jiraIssueKey);
-
-        var filteredIssueInput = new JiraIssueInput(
-            issueInput.sourceId(),
-            issueInput.sourceIdentifier(),
-            issueInput.title(),
-            issueInput.description(),
-            issueInput.priority(),
-            issueInput.stateName(),
-            issueInput.stateType(),
-            issueInput.assigneeEmail(),
-            issueInput.assigneeDisplayName(),
-            issueInput.creatorEmail(),
-            issueInput.creatorDisplayName(),
-            issueInput.teamName(),
-            issueInput.teamKey(),
-            issueInput.labels(),
-            issueInput.comments(),
-            unsyncedAttachments,
-            issueInput.createdAt(),
-            issueInput.updatedAt(),
-            issueInput.sourceUrl(),
-            issueInput.parentJiraKey()
-        );
+                unsyncedAttachments.size(), linearIssue.identifier(), jiraIssueKey);
 
         try {
-            jira.syncAttachments(jiraIssueKey, filteredIssueInput);
+            jira.syncAttachments(jiraIssueKey, issueInput.withAttachments(unsyncedAttachments));
 
-            for (var attachment : unsyncedAttachments) {
-                state.markAttachmentSynced(linearIssue.id(), attachment.id());
-                Log.debugf("Marked attachment %s as synced for Linear issue %s",
-                          attachment.id(), linearIssue.identifier());
-            }
+            unsyncedAttachments.forEach(attachment -> state.markAttachmentSynced(linearIssue.id(), attachment.id()));
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             Log.errorf(e, "Failed to sync attachments for Linear issue %s to Jira issue %s",
-                      linearIssue.identifier(), jiraIssueKey);
+                    linearIssue.identifier(), jiraIssueKey);
         }
     }
 }

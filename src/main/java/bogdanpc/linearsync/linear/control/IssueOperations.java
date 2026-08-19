@@ -8,103 +8,116 @@ import org.eclipse.microprofile.rest.client.inject.RestClient;
 
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 @ApplicationScoped
 public class IssueOperations {
+
+    private static final int PAGE_SIZE = 50;
+
+    /**
+     * Shared selection set, so a single issue and a page of issues always carry the same fields.
+     */
+    private static final String ISSUE_FIELDS = """
+            id
+            identifier
+            title
+            description
+            priority
+            state {
+              id
+              name
+              type
+            }
+            assignee {
+              id
+              name
+              email
+              displayName
+            }
+            creator {
+              id
+              name
+              email
+              displayName
+            }
+            team {
+              id
+              name
+              key
+            }
+            labels {
+              nodes {
+                id
+                name
+                color
+              }
+            }
+            comments(first: 100) {
+              nodes {
+                id
+                body
+                user {
+                  id
+                  name
+                  email
+                  displayName
+                }
+                createdAt
+                updatedAt
+                url
+              }
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+            }
+            attachments(first: 50) {
+              nodes {
+                id
+                title
+                url
+                sourceType
+                creator {
+                  id
+                  name
+                  email
+                  displayName
+                }
+                metadata
+                createdAt
+              }
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+            }
+            parent {
+              id
+              identifier
+              title
+            }
+            children {
+              nodes {
+                id
+                identifier
+                title
+              }
+            }
+            createdAt
+            updatedAt
+            url
+            """;
 
     private static final String ISSUES_QUERY = """
             query GetIssues($first: Int, $after: String, $filter: IssueFilter) {
               issues(first: $first, after: $after, filter: $filter) {
                 nodes {
-                  id
-                  identifier
-                  title
-                  description
-                  priority
-                  state {
-                    id
-                    name
-                    type
-                  }
-                  assignee {
-                    id
-                    name
-                    email
-                    displayName
-                  }
-                  creator {
-                    id
-                    name
-                    email
-                    displayName
-                  }
-                  team {
-                    id
-                    name
-                    key
-                  }
-                  labels {
-                    nodes {
-                      id
-                      name
-                      color
-                    }
-                  }
-                  comments(first: 100) {
-                    nodes {
-                      id
-                      body
-                      user {
-                        id
-                        name
-                        email
-                        displayName
-                      }
-                      createdAt
-                      updatedAt
-                      url
-                    }
-                    pageInfo {
-                      hasNextPage
-                      endCursor
-                    }
-                  }
-                  attachments(first: 50) {
-                    nodes {
-                      id
-                      title
-                      url
-                      sourceType
-                      creator {
-                        id
-                        name
-                        email
-                        displayName
-                      }
-                      metadata
-                      createdAt
-                    }
-                    pageInfo {
-                      hasNextPage
-                      endCursor
-                    }
-                  }
-                  parent {
-                    id
-                    identifier
-                    title
-                  }
-                  children {
-                    nodes {
-                      id
-                      identifier
-                      title
-                    }
-                  }
-                  createdAt
-                  updatedAt
-                  url
+            %s
                 }
                 pageInfo {
                   hasNextPage
@@ -112,7 +125,26 @@ public class IssueOperations {
                 }
               }
             }
+            """.formatted(ISSUE_FIELDS.indent(6));
+
+    private static final String ISSUE_QUERY = """
+            query GetIssue($id: String!) {
+              issue(id: $id) {
+            %s
+              }
+            }
+            """.formatted(ISSUE_FIELDS.indent(4));
+
+    private static final String VIEWER_QUERY = """
+            query {
+              viewer {
+                id
+                name
+                email
+              }
+            }
             """;
+
     private final LinearClient linearClient;
 
     public IssueOperations(@RestClient LinearClient linearClient) {
@@ -124,8 +156,28 @@ public class IssueOperations {
     }
 
     public List<LinearIssue> getMyIssues(String teamKey, String stateType, Instant updatedAfter) {
-        String userEmail = getCurrentUserEmail();
-        return fetchIssues(teamKey, stateType, updatedAfter, userEmail);
+        return fetchIssues(teamKey, stateType, updatedAfter, getCurrentUserEmail());
+    }
+
+    /**
+     * The Linear API resolves {@code issue(id:)} against both the UUID and the human-readable
+     * identifier, so one lookup serves callers holding either.
+     */
+    public Optional<LinearIssue> getIssue(String idOrIdentifier) {
+        Log.debugf("Fetching issue: %s", idOrIdentifier);
+
+        var response = linearClient.getIssue(new GraphQLQuery(ISSUE_QUERY, Map.of("id", idOrIdentifier)));
+
+        return response.data() == null ? Optional.empty() : Optional.ofNullable(response.data().issue());
+    }
+
+    public boolean testConnection() {
+        return getCurrentUser() != null;
+    }
+
+    public String getCurrentUserEmail() {
+        var user = getCurrentUser();
+        return user != null ? user.email() : null;
     }
 
     private List<LinearIssue> fetchIssues(String teamKey, String stateType, Instant updatedAfter, String assigneeEmail) {
@@ -137,15 +189,13 @@ public class IssueOperations {
 
         while (hasNextPage) {
             var variables = new HashMap<String, Object>();
-            variables.put("first", 50);
+            variables.put("first", PAGE_SIZE);
             if (cursor != null) {
                 variables.put("after", cursor);
             }
             variables.put("filter", buildFilter(teamKey, stateType, updatedAfter, assigneeEmail));
 
-            var query = new GraphQLQuery(ISSUES_QUERY, variables);
-
-            var response = linearClient.getIssues(query);
+            var response = linearClient.getIssues(new GraphQLQuery(ISSUES_QUERY, variables));
 
             if (response.data() == null || response.data().issues() == null) {
                 break;
@@ -159,257 +209,17 @@ public class IssueOperations {
         return allIssues;
     }
 
-    public boolean testConnection() {
-        var currentUser = getCurrentUser();
-        return currentUser != null;
-    }
-
-    public String getCurrentUserEmail() {
-        var user = getCurrentUser();
-        return user != null ? user.email() : null;
-    }
-
     private LinearUser getCurrentUser() {
-        var testQuery = """
-                query {
-                  viewer {
-                    id
-                    name
-                    email
-                  }
-                }
-                """;
+        var response = linearClient.getCurrentUser(new GraphQLQuery(VIEWER_QUERY, null));
 
-        var query = new GraphQLQuery(testQuery, null);
-        var response = linearClient.getCurrentUser(query);
-
-        if (response.data() != null && response.data().viewer() != null) {
-            var user = response.data().viewer();
-            Log.debugf("Linear user: %s (%s)", user.name(), user.email());
-            return user;
-        } else {
+        if (response.data() == null || response.data().viewer() == null) {
             Log.error("Linear API connection failed");
             return null;
         }
-    }
 
-    public Optional<LinearIssue> getIssueById(String id) {
-        Log.debugf("Fetching issue by ID: %s", id);
-
-        var issueQuery = """
-                query GetIssue($id: String!) {
-                  issue(id: $id) {
-                    id
-                    identifier
-                    title
-                    description
-                    priority
-                    state {
-                      id
-                      name
-                      type
-                    }
-                    assignee {
-                      id
-                      name
-                      email
-                      displayName
-                    }
-                    creator {
-                      id
-                      name
-                      email
-                      displayName
-                    }
-                    team {
-                      id
-                      name
-                      key
-                    }
-                    labels {
-                      nodes {
-                        id
-                        name
-                        color
-                      }
-                    }
-                    comments(first: 100) {
-                      nodes {
-                        id
-                        body
-                        user {
-                          id
-                          name
-                          email
-                          displayName
-                        }
-                        createdAt
-                        updatedAt
-                        url
-                      }
-                      pageInfo {
-                        hasNextPage
-                        endCursor
-                      }
-                    }
-                    attachments(first: 50) {
-                      nodes {
-                        id
-                        title
-                        url
-                        sourceType
-                        creator {
-                          id
-                          name
-                          email
-                          displayName
-                        }
-                        metadata
-                        createdAt
-                      }
-                      pageInfo {
-                        hasNextPage
-                        endCursor
-                      }
-                    }
-                    parent {
-                      id
-                      identifier
-                      title
-                    }
-                    children {
-                      nodes {
-                        id
-                        identifier
-                        title
-                      }
-                    }
-                    createdAt
-                    updatedAt
-                    url
-                  }
-                }
-                """;
-
-        var variables = Map.of("id", id);
-        var query = new GraphQLQuery(issueQuery, variables);
-
-        var response = linearClient.getIssue(query);
-
-        if (response.data() != null && response.data().issue() != null) {
-            return Optional.of(response.data().issue());
-        }
-        return Optional.empty();
-    }
-
-    public Optional<LinearIssue> getIssueByIdentifier(String identifier) {
-        Log.debugf("Fetching issue: %s", identifier);
-
-        var issueQuery = """
-                query GetIssue($id: String!) {
-                  issue(id: $id) {
-                    id
-                    identifier
-                    title
-                    description
-                    priority
-                    state {
-                      id
-                      name
-                      type
-                    }
-                    assignee {
-                      id
-                      name
-                      email
-                      displayName
-                    }
-                    creator {
-                      id
-                      name
-                      email
-                      displayName
-                    }
-                    team {
-                      id
-                      name
-                      key
-                    }
-                    labels {
-                      nodes {
-                        id
-                        name
-                        color
-                      }
-                    }
-                    comments(first: 100) {
-                      nodes {
-                        id
-                        body
-                        user {
-                          id
-                          name
-                          email
-                          displayName
-                        }
-                        createdAt
-                        updatedAt
-                        url
-                      }
-                      pageInfo {
-                        hasNextPage
-                        endCursor
-                      }
-                    }
-                    attachments(first: 50) {
-                      nodes {
-                        id
-                        title
-                        url
-                        sourceType
-                        creator {
-                          id
-                          name
-                          email
-                          displayName
-                        }
-                        metadata
-                        createdAt
-                      }
-                      pageInfo {
-                        hasNextPage
-                        endCursor
-                      }
-                    }
-                    parent {
-                      id
-                      identifier
-                      title
-                    }
-                    children {
-                      nodes {
-                        id
-                        identifier
-                        title
-                      }
-                    }
-                    createdAt
-                    updatedAt
-                    url
-                  }
-                }
-                """;
-
-        var variables = Map.of("id", identifier);
-        var query = new GraphQLQuery(issueQuery, variables);
-
-        var response = linearClient.getIssue(query);
-
-        if (response.data() != null && response.data().issue() != null) {
-            return Optional.of(response.data().issue());
-        }
-        return Optional.empty();
-
+        var user = response.data().viewer();
+        Log.debugf("Linear user: %s (%s)", user.name(), user.email());
+        return user;
     }
 
     private Map<String, Object> buildFilter(String teamKey, String stateType, Instant updatedAfter, String assigneeEmail) {

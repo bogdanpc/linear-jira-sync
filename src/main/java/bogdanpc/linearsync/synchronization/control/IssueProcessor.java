@@ -64,7 +64,7 @@ public class IssueProcessor {
         }
 
         Log.debugf("Syncing parent issue first: %s", parentLinearId);
-        var parentIssue = linearService.getIssueById(parentLinearId);
+        var parentIssue = linearService.getIssue(parentLinearId);
         if (parentIssue.isPresent()) {
             var parentResult = processIssue(parentIssue.get(), state, dryRun);
             return parentResult.jiraIssueKey;
@@ -85,7 +85,7 @@ public class IssueProcessor {
 
         for (var child : children) {
             try {
-                var childIssue = linearService.getIssueById(child.id());
+                var childIssue = linearService.getIssue(child.id());
                 if (childIssue.isPresent()) {
                     processIssue(childIssue.get(), state, dryRun);
                 } else {

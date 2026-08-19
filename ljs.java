@@ -1,6 +1,6 @@
 ///usr/bin/env jbang "$0" "$@" ; exit $?
 //JAVA 25+
-//DEPS io.quarkus.platform:quarkus-bom:3.34.1@pom
+//DEPS io.quarkus.platform:quarkus-bom:3.38.2@pom
 //DEPS io.quarkus:quarkus-picocli
 //DEPS io.quarkus:quarkus-rest-client-jackson
 //DEPS io.quarkus:quarkus-arc
