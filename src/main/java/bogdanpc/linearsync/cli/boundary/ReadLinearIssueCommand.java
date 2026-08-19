@@ -5,6 +5,7 @@ import bogdanpc.linearsync.linear.entity.LinearIssue;
 import io.quarkus.logging.Log;
 import jakarta.inject.Inject;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
@@ -20,11 +21,8 @@ public class ReadLinearIssueCommand implements Callable<Integer> {
     @Parameters(index = "0", description = "Linear issue identifier (e.g., 'ENG-123')")
     String issueIdentifier;
 
-    @Option(names = {"-v", "--verbose"}, description = "Enable verbose output with full details")
-    boolean verbose = false;
-
-    @Option(names = {"-q", "--quiet"}, description = "Suppress non-error output")
-    boolean quiet = false;
+    @Mixin
+    OutputOptions output = new OutputOptions();
 
     @Option(names = {"--comments-only"}, description = "Show only comments (no attachments)")
     boolean commentsOnly = false;
@@ -34,8 +32,7 @@ public class ReadLinearIssueCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        if (quiet && verbose) {
-            Log.error("Error: Cannot use both --quiet and --verbose options");
+        if (!output.applyLogLevel()) {
             return 1;
         }
 
@@ -44,17 +41,16 @@ public class ReadLinearIssueCommand implements Callable<Integer> {
             return 1;
         }
 
-        LoggingConfig.configure(quiet, verbose);
         Log.info("Fetching Linear issue: " + issueIdentifier);
 
         try {
-            return linearService.getIssueByIdentifier(issueIdentifier)
+            return linearService.getIssue(issueIdentifier)
                     .map(this::displayIssue)
                     .orElseGet(() -> {
                         Log.error("Error: Issue not found: " + issueIdentifier);
                         return 1;
                     });
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             Log.error("Error: Failed to fetch Linear issue - " + e.getMessage());
             Log.debug("Stack trace: " + Arrays.toString(e.getStackTrace()));
             return 1;

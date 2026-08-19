@@ -17,6 +17,9 @@ public interface JiraConfig {
     @WithName("api.url")
     Optional<String> apiUrl();
 
+    @WithName("api.cloudid")
+    Optional<String> cloudId();
+
     @WithName("api.username")
     Optional<String> username();
 

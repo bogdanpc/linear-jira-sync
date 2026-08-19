@@ -43,8 +43,11 @@ public class SyncConfiguration {
             throw new ConfigurationException("Jira project key is required (JIRA_PROJECT_KEY or jira.project.key)");
         }
 
-        if (jiraConfig.apiUrl().isEmpty()) {
-            throw new ConfigurationException("Jira API URL is required (JIRA_API_URL or jira.api.url)");
+        var hasCloudId = jiraConfig.cloudId().filter(s -> !s.isBlank()).isPresent();
+        var hasApiUrl = jiraConfig.apiUrl().filter(s -> !s.isBlank()).isPresent();
+        if (!hasCloudId && !hasApiUrl) {
+            throw new ConfigurationException(
+                    "Jira connection requires either jira.api.cloudid (JIRA_API_CLOUDID) or jira.api.url (JIRA_API_URL)");
         }
     }
 }

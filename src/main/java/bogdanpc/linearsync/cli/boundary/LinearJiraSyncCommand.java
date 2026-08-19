@@ -9,20 +9,31 @@ import bogdanpc.linearsync.synchronization.control.Synchronizer;
 import bogdanpc.linearsync.synchronization.entity.SyncResult;
 import io.quarkus.logging.Log;
 import io.quarkus.picocli.runtime.annotations.TopCommand;
+import io.quarkus.runtime.Quarkus;
 import jakarta.inject.Inject;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.concurrent.Callable;
 
 @TopCommand
 @Command(name = "linear-jira-sync", description = "Synchronize Linear issues to Jira", mixinStandardHelpOptions = true, version = "1.0.0", subcommands = {ListLinearIssuesCommand.class, ReadLinearIssueCommand.class})
 public class LinearJiraSyncCommand implements Callable<Integer> {
 
-    public static final String FAILED = "✗ FAILED";
+    private static final String FAILED = "✗ FAILED";
+    private static final String ACTIONS = "sync, test-connection, list-issue-types";
+    private static final int LOG_FLUSH_MILLIS = 100;
+
+    private static final DateTimeFormatter SINCE_FORMAT = DateTimeFormatter.ofPattern("MMM d, HH:mm")
+            .withZone(ZoneId.systemDefault());
 
     @Inject
     SyncConfiguration config;
@@ -36,8 +47,11 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
     @Inject
     IssueOperations linearService;
 
-    @Parameters(index = "0", description = "Action to perform: sync, status, reset, test-connection", defaultValue = "")
+    @Parameters(index = "0", description = "Action to perform: " + ACTIONS, defaultValue = "")
     String action;
+
+    @Mixin
+    OutputOptions output = new OutputOptions();
 
     @Option(names = {"-t", "--team"}, description = "Linear team key to sync (e.g., 'ENG')")
     String teamKey;
@@ -57,12 +71,6 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
     @Option(names = {"-d", "--dry-run"}, description = "Show what would be done without making actual changes")
     boolean dryRun = false;
 
-    @Option(names = {"-v", "--verbose"}, description = "Enable verbose output")
-    boolean verbose = false;
-
-    @Option(names = {"-q", "--quiet"}, description = "Suppress non-error output")
-    boolean quiet = false;
-
     @Option(names = {"--state-dir"}, description = "Custom directory for state file storage (overrides LINEARSYNC_STORAGE_LOCATION)")
     String stateDirectory;
 
@@ -75,24 +83,15 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        if (quiet && verbose) {
-            Log.error("Error: Cannot use both --quiet and --verbose options");
-            io.quarkus.runtime.Quarkus.asyncExit(1);
+        if (!output.applyLogLevel()) {
+            Quarkus.asyncExit(1);
             return 1;
         }
 
-        LoggingConfig.configure(quiet, verbose);
-
-        // Apply CLI overrides for configuration properties
-        if (stateDirectory != null && !stateDirectory.isBlank()) {
-            System.setProperty("sync.storage.location", stateDirectory);
-        }
-        if (jiraProjectKey != null && !jiraProjectKey.isBlank()) {
-            System.setProperty("jira.project.key", jiraProjectKey);
-        }
+        overrideProperty("sync.storage.location", stateDirectory);
+        overrideProperty("jira.project.key", jiraProjectKey);
 
         try {
-
             return switch (action.toLowerCase()) {
                 case "sync" -> performSync();
                 case "test-connection" -> testConnection();
@@ -100,27 +99,56 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
                 default -> unknownAction();
             };
         } finally {
-            // Schedule async exit to allow logs to flush
-            new Thread(() -> {
-                try {
-                    Thread.sleep(100); // Small delay to allow logs to flush
-                } catch (InterruptedException _) {
-                    Thread.currentThread().interrupt();
-                }
-                io.quarkus.runtime.Quarkus.asyncExit();
-            }).start();
+            scheduleExit();
         }
     }
 
+    private static void overrideProperty(String key, String value) {
+        if (value != null && !value.isBlank()) {
+            System.setProperty(key, value);
+        }
+    }
+
+    /**
+     * Quarkus tears the runtime down immediately on exit, which truncates buffered
+     * console output, so the shutdown is pushed to the end of the log flush window.
+     */
+    private static void scheduleExit() {
+        new Thread(() -> {
+            try {
+                Thread.sleep(LOG_FLUSH_MILLIS);
+            } catch (InterruptedException _) {
+                Thread.currentThread().interrupt();
+            }
+            Quarkus.asyncExit();
+        }).start();
+    }
+
+    private boolean configurationIsValid() {
+        try {
+            config.validate();
+            return true;
+        } catch (ConfigurationException e) {
+            Log.error("Configuration error: " + e.getMessage());
+            Log.error("");
+            Log.error("Please ensure all required configuration is set via:");
+            Log.error("1. Environment variables (recommended for credentials)");
+            Log.error("2. application-local.properties file (see application-local.properties.example)");
+            Log.error("3. application.properties file");
+            return false;
+        }
+    }
 
     private Integer performSync() {
-        var configValid = validateConfiguration();
-        if (configValid != null) {
-            return configValid;
+        if (!configurationIsValid()) {
+            return 1;
         }
 
-        var updatedAfterInstant = parseUpdatedAfterTimestamp();
-        if (updatedAfterInstant == null && updatedAfter != null && !updatedAfter.isEmpty()) {
+        Instant updatedAfterInstant;
+        try {
+            updatedAfterInstant = parseUpdatedAfter();
+        } catch (DateTimeParseException _) {
+            Log.error("Error: Invalid datetime format for --updated-after. Use ISO format like '2024-01-01T00:00:00Z'");
             return 1;
         }
 
@@ -136,69 +164,35 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
             printSyncResults(result);
             return result.success ? 0 : 1;
 
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             Log.error("Error: Synchronization failed - " + e.getMessage());
-            Log.debug("Stack trace: " + java.util.Arrays.toString(e.getStackTrace()));
+            Log.debug("Stack trace: " + Arrays.toString(e.getStackTrace()));
             return 1;
         }
     }
 
-    private Integer validateConfiguration() {
-        try {
-            config.validate();
-            return null;
-        } catch (ConfigurationException e) {
-            Log.error("Configuration error: " + e.getMessage());
-            Log.error("");
-            Log.error("Please ensure all required configuration is set via:");
-            Log.error("1. Environment variables (recommended for credentials)");
-            Log.error("2. application-local.properties file (see application-local.properties.example)");
-            Log.error("3. application.properties file");
-            return 1;
-        }
-    }
-
-    private Instant parseUpdatedAfterTimestamp() {
-        if (updatedAfter == null || updatedAfter.isEmpty()) {
-            return null;
-        }
-
-        try {
-            return Instant.parse(updatedAfter);
-        } catch (DateTimeParseException _) {
-            Log.error("Error: Invalid datetime format for --updated-after. Use ISO format like '2024-01-01T00:00:00Z'");
-            return null;
-        }
+    private Instant parseUpdatedAfter() {
+        return updatedAfter == null || updatedAfter.isBlank() ? null : Instant.parse(updatedAfter);
     }
 
     private void printSyncHeader(Instant updatedAfterInstant) {
-        if (dryRun) {
-            Log.info("Linear → Jira Sync (dry-run)");
-        } else {
-            Log.info("Linear → Jira Sync");
-        }
+        Log.info(dryRun ? "Linear → Jira Sync (dry-run)" : "Linear → Jira Sync");
 
         if (issueIdentifier != null) {
             Log.debugf("  Issue: %s", issueIdentifier);
-        } else {
-            Log.debugf("  Team: %s | State: %s | Since: %s",
-                    teamKey != null ? teamKey : "all",
-                    stateType != null ? stateType.getValue() : "all",
-                    formatSinceFilter(updatedAfterInstant));
+            return;
         }
+
+        Log.debugf("  Team: %s | State: %s | Since: %s",
+                teamKey != null ? teamKey : "all",
+                stateType != null ? stateType.getValue() : "all",
+                formatSinceFilter(updatedAfterInstant));
     }
 
-    private String formatSinceFilter(Instant updatedAfter) {
+    private String formatSinceFilter(Instant updatedAfterInstant) {
         if (forceFullSync) return "full sync";
-        if (updatedAfter == null) return "last sync";
-        return formatTimestamp(updatedAfter);
-    }
-
-    private String formatTimestamp(Instant instant) {
-        if (instant == null) return "-";
-        var formatter = java.time.format.DateTimeFormatter.ofPattern("MMM d, HH:mm")
-                .withZone(java.time.ZoneId.systemDefault());
-        return formatter.format(instant);
+        if (updatedAfterInstant == null) return "last sync";
+        return SINCE_FORMAT.format(updatedAfterInstant);
     }
 
     private void printSyncResults(SyncResult result) {
@@ -207,110 +201,72 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
         if (!result.issueResults.isEmpty()) {
             Log.debug("");
             Log.debug("Detailed Results:");
-            for (var issueResult : result.issueResults) {
-                Log.debug("  " + issueResult);
-            }
+            result.issueResults.forEach(issueResult -> Log.debug("  " + issueResult));
         }
 
-        var summary = new StringBuilder();
-        if (result.createdCount > 0) summary.append(result.createdCount).append(" created");
-        if (result.updatedCount > 0) {
-            if (!summary.isEmpty()) summary.append(", ");
-            summary.append(result.updatedCount).append(" updated");
-        }
-        if (result.skippedCount > 0) {
-            if (!summary.isEmpty()) summary.append(", ");
-            summary.append(result.skippedCount).append(" skipped");
-        }
-        if (!result.errors.isEmpty()) {
-            if (!summary.isEmpty()) summary.append(", ");
-            summary.append(result.errors.size()).append(" errors");
-        }
+        var counts = new ArrayList<String>();
+        if (result.createdCount > 0) counts.add(result.createdCount + " created");
+        if (result.updatedCount > 0) counts.add(result.updatedCount + " updated");
+        if (result.skippedCount > 0) counts.add(result.skippedCount + " skipped");
+        if (!result.errors.isEmpty()) counts.add(result.errors.size() + " errors");
 
-        if (summary.isEmpty()) {
-            Log.info("Done - no changes");
-        } else {
-            Log.infof("Done - %s", summary);
-        }
+        Log.info(counts.isEmpty() ? "Done - no changes" : "Done - " + String.join(", ", counts));
 
         if (!result.errors.isEmpty()) {
             Log.error("Errors:");
-            for (var error : result.errors) {
-                Log.error("  " + error);
-            }
+            result.errors.forEach(error -> Log.error("  " + error));
         }
     }
 
     private Integer testConnection() {
-        Log.info("Testing API connections...");
-
-        try {
-            config.validate();
-        } catch (ConfigurationException e) {
-            Log.error("Configuration error: " + e.getMessage());
-            Log.error("");
-            Log.error("Please ensure all required configuration is set via:");
-            Log.error("1. Environment variables (recommended for credentials)");
-            Log.error("2. application-local.properties file (see application-local.properties.example)");
-            Log.error("3. application.properties file");
+        if (!configurationIsValid()) {
             return 1;
         }
 
-        var allConnected = true;
+        Log.info("Testing API connections...");
 
-        Log.info("Testing Linear API connection... ");
+        var linearConnected = testConnection("Linear", linearService::testConnection);
+        var jiraConnected = testConnection("Jira", jiraService::testConnection);
 
-        var linearConnected = false;
+        Log.info("");
+        if (linearConnected && jiraConnected) {
+            Log.info("✓ All API connections are working correctly");
+            return 0;
+        }
+
+        Log.info("✗ One or more API connections failed");
+        Log.info("");
+        Log.info("Please check:");
+        if (!linearConnected) {
+            Log.info("- LINEAR_API_TOKEN environment variable is set and valid");
+            Log.info("- Linear API URL is accessible: https://api.linear.app/graphql");
+        }
+        if (!jiraConnected) {
+            Log.info("- JIRA_API_TOKEN and JIRA_USERNAME environment variables are set and valid");
+            Log.info("- JIRA_API_URL environment variable is set to your Jira instance URL");
+        }
+        return 1;
+    }
+
+    private static boolean testConnection(String name, Callable<Boolean> probe) {
+        Log.infof("Testing %s API connection... ", name);
         try {
-            linearConnected = linearService.testConnection();
-            Log.info(linearConnected ? "✓ SUCCESS" : FAILED);
+            var connected = Boolean.TRUE.equals(probe.call());
+            Log.info(connected ? "✓ SUCCESS" : FAILED);
+            return connected;
         } catch (Exception e) {
             Log.error(FAILED);
             Log.error("  Error: " + e.getMessage());
+            return false;
         }
-
-        Log.info("Testing Jira API connection... ");
-
-        var jiraConnected = false;
-        try {
-            jiraConnected = jiraService.testConnection();
-            Log.info(jiraConnected ? "✓ SUCCESS" : FAILED);
-        } catch (Exception e) {
-            Log.info(FAILED);
-            Log.debug("  Error: " + e.getMessage());
-        }
-
-        allConnected = linearConnected && jiraConnected;
-
-        Log.info("");
-        if (allConnected) {
-            Log.info("✓ All API connections are working correctly");
-        } else {
-            Log.info("✗ One or more API connections failed");
-            Log.info("");
-            Log.info("Please check:");
-            if (!linearConnected) {
-                Log.info("- LINEAR_API_TOKEN environment variable is set and valid");
-                Log.info("- Linear API URL is accessible: https://api.linear.app/graphql");
-            }
-            if (!jiraConnected) {
-                Log.info("- JIRA_API_TOKEN and JIRA_USERNAME environment variables are set and valid");
-                Log.info("- JIRA_API_URL environment variable is set to your Jira instance URL");
-            }
-        }
-
-        return allConnected ? 0 : 1;
     }
 
     private Integer listIssueTypes() {
-        Log.info("Fetching available issue types from Jira project...");
-
-        try {
-            config.validate();
-        } catch (ConfigurationException e) {
-           Log.error("Configuration error: " + e.getMessage());
+        if (!configurationIsValid()) {
             return 1;
         }
+
+        Log.info("Fetching available issue types from Jira project...");
 
         try {
             var issueTypes = jiraService.getProjectIssueTypes();
@@ -321,12 +277,10 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
             }
 
             Log.info("Available issue types:");
-
             for (var issueType : issueTypes) {
-                var subtaskMarker = issueType.subtask() ? " [subtask]" : "";
-                Log.errorf("  - %s%s%n", issueType.name(), subtaskMarker);
+                Log.infof("  - %s%s", issueType.name(), issueType.subtask() ? " [subtask]" : "");
                 if (issueType.description() != null && !issueType.description().isBlank()) {
-                    Log.errorf("      %s%n", issueType.description());
+                    Log.infof("      %s", issueType.description());
                 }
             }
 
@@ -335,14 +289,14 @@ public class LinearJiraSyncCommand implements Callable<Integer> {
             Log.info("  JIRA_SUBTASK_TYPE=<name>    (for subtasks, use a [subtask] type)");
 
             return 0;
-        } catch (Exception e) {
-           Log.errorf("Failed to fetch issue types: " + e.getMessage());
+        } catch (RuntimeException e) {
+            Log.error("Failed to fetch issue types: " + e.getMessage());
             return 1;
         }
     }
 
     private Integer unknownAction() {
-        Log.error("Error: Unknown action '" + action + "'. Use: sync, status, reset, test-connection, or list-issue-types");
+        Log.error("Error: Unknown action '" + action + "'. Use: " + ACTIONS);
         return 1;
     }
 }

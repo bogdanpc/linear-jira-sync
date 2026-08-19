@@ -35,7 +35,7 @@ public class Synchronizer {
         try {
             var state = syncCoordinator.prepareSync();
 
-            var linearIssue = linearService.getIssueByIdentifier(issueIdentifier);
+            var linearIssue = linearService.getIssue(issueIdentifier);
             if (linearIssue.isEmpty()) {
                 result.endTime = Instant.now();
                 result.success = false;

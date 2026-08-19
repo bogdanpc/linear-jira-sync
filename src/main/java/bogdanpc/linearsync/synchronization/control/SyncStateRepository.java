@@ -119,7 +119,7 @@ public class SyncStateRepository {
             if (sortedBackups.size() <= maxBackups) {
                 return;
             }
-            sortedBackups.forEach(SyncStateRepository::deleteFile);
+            sortedBackups.subList(maxBackups, sortedBackups.size()).forEach(SyncStateRepository::deleteFile);
 
         } catch (IOException e) {
             Log.warnf(e, "Failed to rotate backups in directory: %s", backupDir);

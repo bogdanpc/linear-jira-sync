@@ -30,11 +30,15 @@ CLI tool to synchronize Linear issues to Jira projects.
 
    ```bash
    export LINEAR_API_TOKEN="lin_api_..."
-   export JIRA_API_URL="https://yourcompany.atlassian.net"
+   export JIRA_API_CLOUDID="your-cloud-id"   # Atlassian Cloud ID (preferred)
    export JIRA_USERNAME="your@email.com"
    export JIRA_API_TOKEN="ATATT3..."
    export JIRA_PROJECT_KEY="PROJ"
    ```
+
+   > **Finding your Cloud ID:** Run `curl https://your-domain.atlassian.net/_edge/tenant_info` — the `cloudId` field is
+   the value you need. Alternatively, you can use `JIRA_API_URL=https://your-domain.atlassian.net` instead of the Cloud
+   ID.
 
 3. **Test the connection:**
 
@@ -55,7 +59,40 @@ CLI tool to synchronize Linear issues to Jira projects.
    ```
 
 > **Alternative: Run without building** - Install [JBang](https://www.jbang.dev) and run directly:
-`jbang sync.java sync --dry-run`
+> `jbang sync.java sync --dry-run`
+
+## The `ljs` Launcher
+
+`./ljs` is a shell wrapper around the packaged JAR, so you type less:
+
+```bash
+./ljs test-connection
+./ljs sync --dry-run
+./ljs sync --issue JIR-1
+./ljs list --team ENG
+```
+
+It replaces `java -jar target/quarkus-app/quarkus-run.jar <command>`. Run it from the project directory. If the JAR is
+missing, it tells you to run `./mvnw package` first.
+
+### Faster startup with AOT
+
+AOT (Ahead-of-Time) means the JVM stores a warm-up cache on disk, so the next start is much faster. Build the cache
+once:
+
+```bash
+./build-aot.sh
+```
+
+This writes `target/quarkus-app/app.aot`. From then on `./ljs` picks it up automatically. Without the cache, `./ljs`
+still works but prints a reminder:
+
+```
+Note: running without AOT cache (slower startup).
+      Build it with: ./build-aot.sh
+```
+
+Rebuild the cache after every `./mvnw package`, because a clean build removes it.
 
 ## Prerequisites
 
@@ -129,7 +166,8 @@ The tool supports multiple configuration methods with the following priority (hi
 
 ```bash
 export LINEAR_API_TOKEN="your_linear_api_token"
-export JIRA_API_URL="https://your-domain.atlassian.net"
+export JIRA_API_CLOUDID="your-cloud-id"          # Atlassian Cloud ID (preferred)
+# export JIRA_API_URL="https://your-domain.atlassian.net"  # Alternative to Cloud ID
 export JIRA_USERNAME="your-email@domain.com"
 export JIRA_API_TOKEN="your_jira_api_token"
 export JIRA_PROJECT_KEY="YOUR_PROJECT_KEY"
@@ -338,6 +376,51 @@ java -jar target/quarkus-app/quarkus-run.jar --help
 ./mvnw package -Dnative
 ```
 
+### Checking and Updating Dependencies
+
+Versions are managed by the Quarkus BOM. The flags below tell the
+[versions-maven-plugin](https://www.mojohaus.org/versions/versions-maven-plugin/) to ignore the BOM and report the real
+latest available versions.
+
+**Check for updates** (reports only, never edits the POM):
+
+```shell
+# Is a newer Quarkus platform available?
+mvn versions:display-property-updates
+
+# Direct dependencies that are behind the latest release, ignoring the BOM
+mvn versions:display-dependency-updates \
+    -DprocessDependencyManagement=false \
+    -DprocessDependencyManagementTransitive=false
+```
+
+**Update Quarkus** with the [Quarkus CLI](https://quarkus.io/guides/cli-tooling) — preferred, as it also applies
+migration recipes (OpenRewrite) and not just a version bump:
+
+```shell
+# Update to the latest recommended platform version
+quarkus update
+
+# Or target a specific stream/version
+quarkus update --stream=3.35
+```
+
+**Update other dependencies** with the versions-maven-plugin (edits `pom.xml`; a `pom.xml.versionsBackup` is written
+first):
+
+```shell
+# Bump explicitly-versioned direct dependencies to their latest release
+mvn versions:use-latest-releases
+
+# Verify the build still works, then keep or revert the changes
+./mvnw clean test
+mvn versions:commit   # keep — deletes the backup files
+mvn versions:revert   # or undo — restores the original poms
+```
+
+Update Quarkus first: a newer platform usually pulls in newer transitive dependencies (Jackson, Picocli, ...)
+automatically and clears most of the "outdated" report.
+
 ### Native Executable
 
 For faster startup and lower memory usage:
@@ -416,8 +499,8 @@ jq '.' ~/.linear-jira-sync/.syncstate.json
 
 ## Production Deployment
 
-For production deployment guides including cron, systemd, Docker, and Kubernetes, see *
-*[docs/production-deployment.md](docs/production-deployment.md)**.
+For production deployment guides including cron, systemd, Docker, and Kubernetes,
+see \* \*[docs/production-deployment.md](docs/production-deployment.md)\*\*.
 
 Quick start for scheduled sync:
 

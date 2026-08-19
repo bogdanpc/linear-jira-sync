@@ -31,6 +31,12 @@ public record JiraIssueInput(
     String parentJiraKey
 ) {
 
+    public JiraIssueInput withAttachments(List<AttachmentInput> replacement) {
+        return new JiraIssueInput(sourceId, sourceIdentifier, title, description, priority, stateName, stateType,
+                assigneeEmail, assigneeDisplayName, creatorEmail, creatorDisplayName, teamName, teamKey, labels,
+                comments, replacement, createdAt, updatedAt, sourceUrl, parentJiraKey);
+    }
+
     public record LabelInput(
         String name,
         String color
