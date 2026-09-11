@@ -1,0 +1,160 @@
+package bogdanpc.linearsync.cli.boundary;
+
+import bogdanpc.linearsync.configuration.control.SyncConfiguration;
+import bogdanpc.linearsync.linear.entity.LinearStateType;
+import bogdanpc.linearsync.synchronization.control.Synchronizer;
+import bogdanpc.linearsync.synchronization.entity.SyncResult;
+import io.quarkus.logging.Log;
+import jakarta.enterprise.context.Dependent;
+import jakarta.inject.Inject;
+import org.aesh.command.Command;
+import org.aesh.command.CommandDefinition;
+import org.aesh.command.CommandResult;
+import org.aesh.command.invocation.CommandInvocation;
+import org.aesh.command.option.Mixin;
+import org.aesh.command.option.Option;
+
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
+import java.util.Arrays;
+
+@Dependent
+@CommandDefinition(name = "sync", description = "Synchronize Linear issues to Jira", generateHelp = true)
+public class SyncCommand implements Command<CommandInvocation> {
+
+    private static final DateTimeFormatter SINCE_FORMAT = DateTimeFormatter.ofPattern("MMM d, HH:mm")
+            .withZone(ZoneId.systemDefault());
+
+    @Inject
+    SyncConfiguration config;
+
+    @Inject
+    Synchronizer synchronizer;
+
+    @Mixin
+    OutputOptions output;
+
+    @Option(name = "team", shortName = 't', description = "Linear team key to sync (e.g., 'ENG')")
+    String teamKey;
+
+    @Option(name = "state", shortName = 's', converter = StateTypeConverter.class, description = "Filter by Linear issue state type (e.g., 'started', 'completed')")
+    LinearStateType stateType;
+
+    @Option(name = "issue", shortName = 'i', description = "Sync only a specific Linear issue by identifier (e.g., 'ENG-123')")
+    String issueIdentifier;
+
+    @Option(name = "updated-after", shortName = 'u', description = "Only sync issues updated after this ISO datetime (e.g., '2024-01-01T00:00:00Z')")
+    String updatedAfter;
+
+    @Option(name = "force-full-sync", shortName = 'f', hasValue = false, description = "Force full synchronization, ignoring last sync time")
+    boolean forceFullSync;
+
+    @Option(name = "dry-run", shortName = 'd', hasValue = false, description = "Show what would be done without making actual changes")
+    boolean dryRun;
+
+    @Option(name = "state-dir", description = "Custom directory for state file storage (overrides LINEARSYNC_STORAGE_LOCATION)")
+    String stateDirectory;
+
+    @Option(name = "jira-project-key", description = "Target Jira project key (overrides JIRA_PROJECT_KEY)")
+    String jiraProjectKey;
+
+    @Override
+    public CommandResult execute(CommandInvocation invocation) {
+        if (!output.applyLogLevel()) {
+            return CommandResult.FAILURE;
+        }
+
+        overrideProperty("sync.storage.location", stateDirectory);
+        overrideProperty("jira.project.key", jiraProjectKey);
+
+        if (!ConfigurationCheck.isValid(config)) {
+            return CommandResult.FAILURE;
+        }
+
+        Instant updatedAfterInstant;
+        try {
+            updatedAfterInstant = parseUpdatedAfter();
+        } catch (DateTimeParseException _) {
+            Log.error("Error: Invalid datetime format for --updated-after. Use ISO format like '2024-01-01T00:00:00Z'");
+            return CommandResult.FAILURE;
+        }
+
+        printSyncHeader(updatedAfterInstant);
+
+        try {
+            synchronizer.setDryRun(dryRun);
+
+            var result = issueIdentifier != null ? synchronizer.synchronizeSingleIssue(issueIdentifier)
+                    : synchronizer.synchronize(teamKey, stateType != null ? stateType.getValue() : null,
+                            updatedAfterInstant, forceFullSync);
+
+            printSyncResults(result);
+            return result.success ? CommandResult.SUCCESS : CommandResult.FAILURE;
+
+        } catch (RuntimeException e) {
+            Log.error("Error: Synchronization failed - " + e.getMessage());
+            Log.debug("Stack trace: " + Arrays.toString(e.getStackTrace()));
+            return CommandResult.FAILURE;
+        }
+    }
+
+    private static void overrideProperty(String key, String value) {
+        if (value != null && !value.isBlank()) {
+            System.setProperty(key, value);
+        }
+    }
+
+    private Instant parseUpdatedAfter() {
+        return updatedAfter == null || updatedAfter.isBlank() ? null : Instant.parse(updatedAfter);
+    }
+
+    private void printSyncHeader(Instant updatedAfterInstant) {
+        Log.info(dryRun ? "Linear → Jira Sync (dry-run)" : "Linear → Jira Sync");
+
+        if (issueIdentifier != null) {
+            Log.debugf("  Issue: %s", issueIdentifier);
+            return;
+        }
+
+        Log.debugf("  Team: %s | State: %s | Since: %s", teamKey != null ? teamKey : "all",
+                stateType != null ? stateType.getValue() : "all", formatSinceFilter(updatedAfterInstant));
+    }
+
+    private String formatSinceFilter(Instant updatedAfterInstant) {
+        if (forceFullSync)
+            return "full sync";
+        if (updatedAfterInstant == null)
+            return "last sync";
+        return SINCE_FORMAT.format(updatedAfterInstant);
+    }
+
+    private void printSyncResults(SyncResult result) {
+        Log.debug(result.getSummary());
+
+        if (!result.issueResults.isEmpty()) {
+            Log.debug("");
+            Log.debug("Detailed Results:");
+            result.issueResults.forEach(issueResult -> Log.debug("  " + issueResult));
+        }
+
+        var counts = new ArrayList<String>();
+        if (result.createdCount > 0)
+            counts.add(result.createdCount + " created");
+        if (result.updatedCount > 0)
+            counts.add(result.updatedCount + " updated");
+        if (result.skippedCount > 0)
+            counts.add(result.skippedCount + " skipped");
+        if (!result.errors.isEmpty())
+            counts.add(result.errors.size() + " errors");
+
+        Log.info(counts.isEmpty() ? "Done - no changes" : "Done - " + String.join(", ", counts));
+
+        if (!result.errors.isEmpty()) {
+            Log.error("Errors:");
+            result.errors.forEach(error -> Log.error("  " + error));
+        }
+    }
+}

@@ -418,7 +418,7 @@ mvn versions:commit   # keep — deletes the backup files
 mvn versions:revert   # or undo — restores the original poms
 ```
 
-Update Quarkus first: a newer platform usually pulls in newer transitive dependencies (Jackson, Picocli, ...)
+Update Quarkus first: a newer platform usually pulls in newer transitive dependencies (Jackson, Aesh, ...)
 automatically and clears most of the "outdated" report.
 
 ### Native Executable

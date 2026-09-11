@@ -13,7 +13,7 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
-        <quarkus.platform.version>3.38.2</quarkus.platform.version>
+        <quarkus.platform.version>3.39.3</quarkus.platform.version>
         <skipITs>true</skipITs>
         <surefire-plugin.version>3.5.6</surefire-plugin.version>
         <argLine>-XX:+UseCompactObjectHeaders</argLine>
@@ -38,7 +38,7 @@
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
-            <artifactId>quarkus-picocli</artifactId>
+            <artifactId>quarkus-aesh</artifactId>
         </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
@@ -94,6 +94,12 @@
                 <version>${compiler-plugin.version}</version>
                 <configuration>
                     <parameters>true</parameters>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.aesh</groupId>
+                            <artifactId>aesh-processor</artifactId>
+                        </path>
+                    </annotationProcessorPaths>
                 </configuration>
             </plugin>
             <plugin>

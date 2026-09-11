@@ -3,65 +3,67 @@ package bogdanpc.linearsync.cli.boundary;
 import bogdanpc.linearsync.linear.control.IssueOperations;
 import bogdanpc.linearsync.linear.entity.LinearIssue;
 import io.quarkus.logging.Log;
+import jakarta.enterprise.context.Dependent;
 import jakarta.inject.Inject;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Mixin;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
+import org.aesh.command.Command;
+import org.aesh.command.CommandDefinition;
+import org.aesh.command.CommandResult;
+import org.aesh.command.invocation.CommandInvocation;
+import org.aesh.command.option.Argument;
+import org.aesh.command.option.Mixin;
+import org.aesh.command.option.Option;
 
 import java.util.Arrays;
-import java.util.concurrent.Callable;
 
-@Command(name = "read", description = "Read a specific Linear issue with comments and attachments", mixinStandardHelpOptions = true)
-public class ReadLinearIssueCommand implements Callable<Integer> {
+@Dependent
+@CommandDefinition(name = "read", description = "Read a specific Linear issue with comments and attachments", generateHelp = true)
+public class ReadLinearIssueCommand implements Command<CommandInvocation> {
 
     @Inject
     IssueOperations linearService;
 
-    @Parameters(index = "0", description = "Linear issue identifier (e.g., 'ENG-123')")
+    @Argument(description = "Linear issue identifier (e.g., 'ENG-123')", required = true)
     String issueIdentifier;
 
     @Mixin
-    OutputOptions output = new OutputOptions();
+    OutputOptions output;
 
-    @Option(names = {"--comments-only"}, description = "Show only comments (no attachments)")
-    boolean commentsOnly = false;
+    @Option(name = "comments-only", hasValue = false, description = "Show only comments (no attachments)")
+    boolean commentsOnly;
 
-    @Option(names = {"--attachments-only"}, description = "Show only attachments (no comments)")
-    boolean attachmentsOnly = false;
+    @Option(name = "attachments-only", hasValue = false, description = "Show only attachments (no comments)")
+    boolean attachmentsOnly;
 
     @Override
-    public Integer call() {
+    public CommandResult execute(CommandInvocation invocation) {
         if (!output.applyLogLevel()) {
-            return 1;
+            return CommandResult.FAILURE;
         }
 
         if (commentsOnly && attachmentsOnly) {
             Log.error("Error: Cannot use both --comments-only and --attachments-only options");
-            return 1;
+            return CommandResult.FAILURE;
         }
 
         Log.info("Fetching Linear issue: " + issueIdentifier);
 
         try {
-            return linearService.getIssue(issueIdentifier)
-                    .map(this::displayIssue)
-                    .orElseGet(() -> {
-                        Log.error("Error: Issue not found: " + issueIdentifier);
-                        return 1;
-                    });
+            return linearService.getIssue(issueIdentifier).map(this::displayIssue).orElseGet(() -> {
+                Log.error("Error: Issue not found: " + issueIdentifier);
+                return CommandResult.FAILURE;
+            });
         } catch (RuntimeException e) {
             Log.error("Error: Failed to fetch Linear issue - " + e.getMessage());
             Log.debug("Stack trace: " + Arrays.toString(e.getStackTrace()));
-            return 1;
+            return CommandResult.FAILURE;
         }
     }
 
-    private int displayIssue(LinearIssue issue) {
+    private CommandResult displayIssue(LinearIssue issue) {
         displayIssueBasicInfo(issue);
         displayComments(issue);
         displayAttachments(issue);
-        return 0;
+        return CommandResult.SUCCESS;
     }
 
     private static void displayIssueBasicInfo(LinearIssue issue) {
