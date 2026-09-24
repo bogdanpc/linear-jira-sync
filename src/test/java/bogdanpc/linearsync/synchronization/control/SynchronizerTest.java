@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.Optional;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -54,8 +55,7 @@ class SynchronizerTest {
         assertTrue(result.success());
         assertEquals(1, result.count(SyncAction.CREATE));
 
-        verify(postRequestedFor(urlEqualTo("/linear/"))
-                .withRequestBody(containing("GetIssue"))
+        verify(postRequestedFor(urlEqualTo("/linear/")).withRequestBody(containing("GetIssue"))
                 .withRequestBody(matchingJsonPath("$.variables[?(@.id == 'ENG-123')]")));
 
         verify(postRequestedFor(urlEqualTo("/jira/rest/api/3/issue"))
@@ -70,8 +70,7 @@ class SynchronizerTest {
         assertEquals(0, result.count(SyncAction.CREATE));
         assertEquals(1, result.allErrors().size());
 
-        verify(postRequestedFor(urlEqualTo("/linear/"))
-                .withRequestBody(containing("GetIssue")));
+        verify(postRequestedFor(urlEqualTo("/linear/")).withRequestBody(containing("GetIssue")));
         verify(0, postRequestedFor(urlEqualTo("/jira/rest/api/3/issue")));
     }
 
@@ -93,11 +92,8 @@ class SynchronizerTest {
         state.recordSync("parent-1", "TEST-100", "100", Instant.parse("2024-01-01T00:00:00Z"));
         stateRepository.saveState(state);
 
-        var stub = wiremock.register(post(urlEqualTo("/linear/"))
-                .atPriority(1)
-                .withRequestBody(containing("GetIssues"))
-                .withRequestBody(containing("\"key\":{\"eq\":\"CHILD\"}"))
-                .willReturn(okJson("""
+        var stub = wiremock.register(post(urlEqualTo("/linear/")).atPriority(1).withRequestBody(containing("GetIssues"))
+                .withRequestBody(containing("\"key\":{\"eq\":\"CHILD\"}")).willReturn(okJson("""
                         {"data": {"issues": {
                           "nodes": [{
                             "id": "issue-child",
@@ -112,10 +108,9 @@ class SynchronizerTest {
                         }}}
                         """)));
 
-        var projectStub = wiremock.register(get(urlEqualTo("/jira/rest/api/3/project/TEST"))
-                .willReturn(okJson("""
-                        {"key": "TEST", "issueTypes": [{"id": "1", "name": "Sub-task", "subtask": true}]}
-                        """)));
+        var projectStub = wiremock.register(get(urlEqualTo("/jira/rest/api/3/project/TEST")).willReturn(okJson("""
+                {"key": "TEST", "issueTypes": [{"id": "1", "name": "Sub-task", "subtask": true}]}
+                """)));
 
         try {
             var result = synchronizer.synchronize("CHILD", null, null, true, false);
@@ -131,5 +126,70 @@ class SynchronizerTest {
             wiremock.removeStubMapping(stub);
             wiremock.removeStubMapping(projectStub);
         }
+    }
+
+    @Test
+    void testSynchronize_RecordsRunStartAsSyncTime() {
+        var slowCreate = wiremock.register(post(urlEqualTo("/jira/rest/api/3/issue"))
+                .atPriority(1)
+                .willReturn(aResponse().withStatus(201)
+                        .withHeader("Content-Type", "application/json")
+                        .withBodyFile("jira-create-success.json")
+                        .withFixedDelay(500)));
+        var before = Instant.now();
+
+        try {
+            assertTrue(synchronizer.synchronize("ENG", null, null, false, false).success());
+        } finally {
+            wiremock.removeStubMapping(slowCreate);
+        }
+
+        var lastSync = stateRepository.loadState().lastSyncTime().orElseThrow();
+        assertTrue(lastSync.isBefore(before.plusMillis(500)),
+                "Issues edited in Linear while the run is in progress must be fetched by the next run");
+    }
+
+    @Test
+    void testSynchronize_FailedIssueKeepsPreviousSyncTime() {
+        var previousSync = Instant.parse("2024-01-01T00:00:00Z");
+        var state = new SyncState();
+        state.markSynced(previousSync);
+        stateRepository.saveState(state);
+
+        var linearStub = wiremock.register(post(urlEqualTo("/linear/"))
+                .atPriority(1)
+                .withRequestBody(containing("GetIssues"))
+                .withRequestBody(containing("\"key\":{\"eq\":\"PARTIAL\"}"))
+                .willReturn(okJson("""
+                        {"data": {"issues": {
+                          "nodes": [
+                            {"id": "issue-ok", "identifier": "ENG-123", "title": "Test Issue",
+                             "state": {"id": "state-1", "name": "Todo", "type": "unstarted"},
+                             "createdAt": "2024-01-01T10:00:00Z", "updatedAt": "2024-01-02T10:00:00Z"},
+                            {"id": "issue-bad", "identifier": "ENG-2", "title": "Fails",
+                             "state": {"id": "state-1", "name": "Todo", "type": "unstarted"},
+                             "createdAt": "2024-01-01T10:00:00Z", "updatedAt": "2024-01-02T10:00:00Z"}
+                          ],
+                          "pageInfo": {"hasNextPage": false, "endCursor": null}
+                        }}}
+                        """)));
+        var failingCreate = wiremock.register(post(urlEqualTo("/jira/rest/api/3/issue"))
+                .atPriority(1)
+                .withRequestBody(containing("[ENG-2]"))
+                .willReturn(aResponse().withStatus(400).withBody("Field error")));
+
+        try {
+            var result = synchronizer.synchronize("PARTIAL", null, null, false, false);
+
+            assertFalse(result.success());
+            assertEquals(1, result.count(SyncAction.CREATE));
+        } finally {
+            wiremock.removeStubMapping(linearStub);
+            wiremock.removeStubMapping(failingCreate);
+        }
+
+        var saved = stateRepository.loadState();
+        assertTrue(saved.syncedIssue("issue-ok").isPresent(), "The successful issue is still recorded");
+        assertEquals(Optional.of(previousSync), saved.lastSyncTime(), "The failed issue must be fetched again");
     }
 }

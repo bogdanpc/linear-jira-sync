@@ -10,7 +10,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.time.Instant;
 import java.util.Comparator;
 
 @ApplicationScoped
@@ -72,8 +71,6 @@ public class SyncStateRepository {
         Log.debugf("Saving state to: %s", stateFilePath);
 
         try {
-            state.markSynced(Instant.now());
-
             var json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(state);
 
             var parentDir = stateFilePath.getParent();

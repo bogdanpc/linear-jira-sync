@@ -48,7 +48,7 @@ public interface JiraConfig {
      * Checks if the Linear ID custom field is configured.
      */
     default boolean hasLinearIdField() {
-        return linearIdField().filter(s -> !s.isBlank()).isEmpty();
+        return linearIdField().filter(s -> !s.isBlank()).isPresent();
     }
 
     /**
@@ -69,12 +69,5 @@ public interface JiraConfig {
     default String linearIdFieldNumericId() {
         var fieldName = linearIdFieldName();
         return fieldName.replace("customfield_", "");
-    }
-
-    /**
-     * Builds a JQL clause to search by Linear issue ID.
-     */
-    default String jqlByLinearId(String linearId) {
-        return String.format("cf[%s] = \"%s\"", linearIdFieldNumericId(), linearId);
     }
 }

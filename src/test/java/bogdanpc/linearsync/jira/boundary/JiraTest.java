@@ -44,21 +44,39 @@ class JiraTest {
 		assertDoesNotThrow(() -> jiraService.updateIssue("TEST-123", jiraIssueInput));
 	}
 
-	@Test
-	void testFindIssueByLinearId_Found() {
-		var result = jiraService.findIssueBySourceId("linear-issue-id");
-		var issue = result.orElseThrow(() -> new AssertionError("Expected issue to be present"));
+    @Test
+    void testFindExistingIssue_ByLinearIdField() {
+        var issue = jiraService.findExistingIssue("linear-issue-id", "ENG-123")
+                .orElseThrow(() -> new AssertionError("Expected issue to be present"));
 
-		assertEquals("TEST-123", issue.key());
-		assertEquals("12345", issue.id());
-	}
+        assertEquals("TEST-123", issue.key());
+        assertEquals("12345", issue.id());
+    }
 
-	@Test
-	void testFindIssueByLinearId_NotFound() {
-		Optional<JiraIssue> result = jiraService.findIssueBySourceId("nonexistent-id");
+    @Test
+    void testFindExistingIssue_FallsBackToExactSummaryPrefix() {
+        var stub = wiremock.register(get(urlPathEqualTo("/jira/rest/api/3/search/jql")).atPriority(1)
+                .withQueryParam("jql", containing("summary ~")).withQueryParam("fields", containing("summary"))
+                .willReturn(okJson("""
+                        {"issues": [
+                          {"id": "1", "key": "TEST-1", "fields": {"summary": "[ENG-7] Other issue"}},
+                          {"id": "2", "key": "TEST-2", "fields": {"summary": "[ENG-77] Right issue"}}
+                        ]}
+                        """)));
 
-		assertFalse(result.isPresent());
-	}
+        try {
+            var issue = jiraService.findExistingIssue("unknown-linear-id", "ENG-77");
+
+            assertEquals(Optional.of("TEST-2"), issue.map(JiraIssue::key));
+        } finally {
+            wiremock.removeStubMapping(stub);
+        }
+    }
+
+    @Test
+    void testFindExistingIssue_NotFound() {
+        assertTrue(jiraService.findExistingIssue("unknown-linear-id", "ENG-999").isEmpty());
+    }
 
 	@Test
 	void testCreateIssue_AuthenticationError() {

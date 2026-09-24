@@ -5,6 +5,9 @@
     "queryParameters": {
       "jql": {
         "contains": "linear-issue-id"
+      },
+      "fields": {
+        "contains": "key"
       }
     }
   },

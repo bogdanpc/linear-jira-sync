@@ -32,7 +32,7 @@ public class Synchronizer {
         Log.debugf("Single issue sync - Issue: %s, DryRun: %s", issueIdentifier, dryRun);
 
         return linearService.getIssue(issueIdentifier)
-                .map(issue -> run(dryRun, _ -> List.of(issue)))
+                .map(issue -> run(dryRun, false, _ -> List.of(issue)))
                 .orElseGet(() -> SyncResult.aborted(
                         "Linear issue '%s' not found. Please verify the issue identifier is correct."
                                 .formatted(issueIdentifier),
@@ -45,7 +45,7 @@ public class Synchronizer {
         Log.debugf("Sync params - Team: %s, State: %s, UpdatedAfter: %s, ForceFullSync: %s, DryRun: %s",
                 teamKey, stateType, updatedAfter, forceFullSync, dryRun);
 
-        return run(dryRun, state -> {
+        return run(dryRun, true, state -> {
             var effectiveUpdatedAfter = syncCoordinator.determineUpdatedAfter(state, updatedAfter, forceFullSync);
             var issues = linearService.getIssues(teamKey, stateType, effectiveUpdatedAfter);
             var children = issues.stream().filter(issue -> issue.parent() != null).count();
@@ -55,13 +55,21 @@ public class Synchronizer {
         });
     }
 
-    private SyncResult run(boolean dryRun, Function<SyncState, List<LinearIssue>> issueSource) {
+    /**
+     * @param advancesSyncTime whether a clean run moves the incremental-sync baseline. A single-issue run must not:
+     *        other issues changed since the last full run would never be fetched.
+     */
+    private SyncResult run(boolean dryRun, boolean advancesSyncTime,
+            Function<SyncState, List<LinearIssue>> issueSource) {
         var start = Instant.now();
         try {
             var state = syncCoordinator.prepareSync(dryRun);
             var issueResults = new SyncRun(issueSync, linearService, state, dryRun, issueSource.apply(state))
                     .syncAll();
             var result = new SyncResult(issueResults, List.of(), Duration.between(start, Instant.now()));
+            if (advancesSyncTime) {
+                syncCoordinator.advanceSyncTime(state, result, start);
+            }
             syncCoordinator.completeSync(state, result.hasChanges(), dryRun);
             return result;
         } catch (JiraApiException e) {

@@ -39,23 +39,23 @@ public class IssueSync {
         var identifier = linearIssue.identifier();
         var title = truncate(linearIssue.title());
 
-        var existing = jira.findIssueByIdentifier(identifier);
-        if (existing.isPresent()) {
-            var jiraIssue = existing.get();
-            state.recordSync(linearIssue.id(), jiraIssue.key(), jiraIssue.id(), linearIssue.updatedAt());
-            Log.infof("  ↔ %s → %s  %s  (recovered from Jira)", identifier, jiraIssue.key(), title);
-            return IssueResult.succeeded(identifier, jiraIssue.key(), SyncAction.RECOVER,
-                    "Recovered existing Jira issue: " + jiraIssue.key());
-        }
-
-        var issueType = parentJiraKey != null ? "subtask" : "task";
-        if (dryRun) {
-            Log.infof("  + %s  %s  (dry-run)", identifier, title);
-            return IssueResult.succeeded(identifier, "[WOULD-CREATE]", SyncAction.CREATE,
-                    "Would create new Jira " + issueType);
-        }
-
         try {
+            var existing = jira.findExistingIssue(linearIssue.id(), identifier);
+            if (existing.isPresent()) {
+                var jiraIssue = existing.get();
+                state.recordSync(linearIssue.id(), jiraIssue.key(), jiraIssue.id(), linearIssue.updatedAt());
+                Log.infof("  ↔ %s → %s  %s  (recovered from Jira)", identifier, jiraIssue.key(), title);
+                return IssueResult.succeeded(identifier, jiraIssue.key(), SyncAction.RECOVER,
+                        "Recovered existing Jira issue: " + jiraIssue.key());
+            }
+
+            if (dryRun) {
+                var issueType = parentJiraKey != null ? "subtask" : "task";
+                Log.infof("  + %s  %s  (dry-run)", identifier, title);
+                return IssueResult.succeeded(identifier, "[WOULD-CREATE]", SyncAction.CREATE,
+                        "Would create new Jira " + issueType);
+            }
+
             var input = issueDataTransfer.mapToJiraIssueInput(linearIssue, parentJiraKey);
             var created = jira.createIssue(input);
             // recorded before the attachments, which are tracked per synced issue

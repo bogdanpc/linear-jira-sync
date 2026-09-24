@@ -1,16 +1,12 @@
 {
+  "priority": 10,
   "request": {
     "urlPath": "/jira/rest/api/3/search/jql",
-    "method": "GET",
-    "queryParameters": {
-      "jql": {
-        "contains": "project = TEST"
-      }
-    }
+    "method": "GET"
   },
   "response": {
     "status": 200,
-    "bodyFileName": "jira-issues-list.json",
+    "bodyFileName": "jira-search-empty.json",
     "headers": {
       "Content-Type": "application/json"
     }

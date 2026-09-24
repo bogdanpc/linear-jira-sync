@@ -31,7 +31,7 @@ class IssueFieldMapper {
     }
 
     Map<String, Object> customFields(JiraIssueInput issueInput) {
-        if (config.hasLinearIdField() || issueInput.sourceId() == null) {
+        if (!config.hasLinearIdField() || issueInput.sourceId() == null) {
             return Map.of();
         }
         return Map.of(config.linearIdFieldName(), issueInput.sourceId());

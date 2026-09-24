@@ -37,12 +37,8 @@ public class Jira {
         issueOperations.updateIssue(jiraIssueKey, issueInput);
     }
 
-    public Optional<JiraIssue> findIssueBySourceId(String sourceIssueId) {
-        return searchOperations.findIssueBySourceId(sourceIssueId);
-    }
-
-    public Optional<JiraIssue> findIssueByIdentifier(String sourceIdentifier) {
-        return searchOperations.findIssueByIdentifierInSummary(sourceIdentifier);
+    public Optional<JiraIssue> findExistingIssue(String linearId, String identifier) {
+        return searchOperations.findExistingIssue(linearId, identifier);
     }
 
     public boolean testConnection() {

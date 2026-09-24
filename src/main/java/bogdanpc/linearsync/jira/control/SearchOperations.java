@@ -14,6 +14,10 @@ import java.util.Optional;
 @ApplicationScoped
 public class SearchOperations {
 
+    /** /search/jql returns only issue IDs unless fields are requested. */
+    private static final String SEARCH_FIELDS = "key,summary";
+    private static final int SUMMARY_CANDIDATES = 20;
+
     private final JiraClient jiraClient;
     private final JiraConfig config;
 
@@ -22,49 +26,47 @@ public class SearchOperations {
         this.config = config;
     }
 
-    public Optional<JiraIssue> findIssueBySourceId(String sourceIssueId) {
-        var jql = buildSourceIdQuery(sourceIssueId);
+    /**
+     * Recovers the link to a Jira issue created by an earlier run whose sync state was lost. The Linear ID custom field
+     * is the reliable key; the "[ENG-123]" summary prefix covers setups without that field and issues created before
+     * it was configured. Search failures propagate: treating them as "not found" would create a duplicate.
+     */
+    public Optional<JiraIssue> findExistingIssue(String linearId, String identifier) {
+        return findByLinearIdField(linearId).or(() -> findBySummaryPrefix(identifier));
+    }
 
-        try {
-            var response = jiraClient.searchIssues(jql, null, 1);
-
-            if (response.issues() != null && !response.issues().isEmpty()) {
-                return Optional.of(response.issues().getFirst());
-            }
-
-            return Optional.empty();
-        } catch (Exception e) {
-            Log.errorf(e, "Failed to search for Jira issue with source ID: %s", sourceIssueId);
+    private Optional<JiraIssue> findByLinearIdField(String linearId) {
+        if (!config.hasLinearIdField()) {
             return Optional.empty();
         }
+        var jql = "cf[%s] = %s".formatted(config.linearIdFieldNumericId(), jqlString(linearId));
+        return search(jql, 1).stream().findFirst();
     }
 
     /**
-     * Search for issues with summary starting with [identifier]
+     * Text search is tokenized, so "ENG-12" also matches "[ENG-123]". The prefix check picks the exact match among
+     * the candidates, oldest first in case duplicates already exist.
      */
-    public Optional<JiraIssue> findIssueByIdentifierInSummary(String sourceIdentifier) {
-
+    private Optional<JiraIssue> findBySummaryPrefix(String identifier) {
         var projectKey = config.projectKey().orElseThrow(() -> new IllegalStateException("Jira project key not configured"));
-        var jql = String.format("project = %s AND summary ~ \"[%s]*\"", projectKey, sourceIdentifier);
+        // quoted twice: the inner quotes make Jira match the identifier as a phrase
+        var jql = "project = %s AND summary ~ %s ORDER BY created ASC"
+                .formatted(jqlString(projectKey), jqlString(jqlString(identifier)));
+        var prefix = "[" + identifier + "]";
 
-        try {
-            var response = jiraClient.searchIssues(jql, null, 1);
+        return search(jql, SUMMARY_CANDIDATES).stream()
+                .filter(issue -> issue.fields() != null && issue.fields().summary() != null)
+                .filter(issue -> issue.fields().summary().startsWith(prefix))
+                .findFirst();
+    }
 
-            if (response.issues() != null && !response.issues().isEmpty()) {
-                var issue = response.issues().getFirst();
+    private List<JiraIssue> search(String jql, int maxResults) {
+        var issues = jiraClient.searchIssues(jql, SEARCH_FIELDS, null, maxResults).issues();
+        return issues != null ? issues : List.of();
+    }
 
-                if (issue.fields() != null && issue.fields().summary() != null
-                    && issue.fields().summary().startsWith("[" + sourceIdentifier + "]")) {
-                    Log.debugf("Found existing Jira issue %s for Linear %s", issue.key(), sourceIdentifier);
-                    return Optional.of(issue);
-                }
-            }
-
-            return Optional.empty();
-        } catch (Exception e) {
-            Log.debugf("Failed to search for Jira issue with identifier: %s - %s", sourceIdentifier, e.getMessage());
-            return Optional.empty();
-        }
+    private static String jqlString(String value) {
+        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
     List<JiraComment> getComments(String jiraIssueKey) {
@@ -94,13 +96,6 @@ public class SearchOperations {
 
         Log.debugf("Fetched %d comments for Jira issue: %s", allComments.size(), jiraIssueKey);
         return allComments;
-    }
-
-    private String buildSourceIdQuery(String sourceIssueId) {
-        if (config.hasLinearIdField()) {
-            throw new IllegalStateException("Cannot search by Linear ID - jira.custom-field.linear-id not configured");
-        }
-        return config.jqlByLinearId(sourceIssueId);
     }
 
     public List<JiraProject.IssueType> getProjectIssueTypes() {

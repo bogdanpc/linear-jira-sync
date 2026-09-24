@@ -67,7 +67,6 @@ class SyncStateRepositoryTest {
         repository.saveState(state);
         var loaded = repository.loadState();
 
-        assertTrue(loaded.lastSyncTime().isPresent(), "Saving records the sync time");
         var issue = loaded.syncedIssue("linear-123").orElseThrow();
         assertEquals("JIRA-456", issue.jiraIssueKey());
         assertEquals("jira-id-456", issue.jiraIssueId());

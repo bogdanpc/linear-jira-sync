@@ -34,8 +34,8 @@ public interface JiraClient {
 
     @GET
     @Path("/rest/api/3/search/jql")
-    JiraSearchResponse searchIssues(@QueryParam("jql") String jql, @QueryParam("nextPageToken") String nextPageToken,
-        @QueryParam("maxResults") Integer maxResults);
+    JiraSearchResponse searchIssues(@QueryParam("jql") String jql, @QueryParam("fields") String fields,
+        @QueryParam("nextPageToken") String nextPageToken, @QueryParam("maxResults") Integer maxResults);
 
     @GET
     @Path("/rest/api/3/myself")

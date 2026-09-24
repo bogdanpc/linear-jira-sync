@@ -1,5 +1,6 @@
 package bogdanpc.linearsync.synchronization.control;
 
+import bogdanpc.linearsync.synchronization.entity.SyncResult;
 import bogdanpc.linearsync.synchronization.entity.SyncState;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -30,6 +31,18 @@ public class SyncCoordinator {
         }
 
         return state;
+    }
+
+    /**
+     * The sync time is when the run started, not when it ended, so issues edited in Linear during the run are fetched
+     * next time. It only advances on a clean run: issues that failed to sync must fall inside the next fetch window.
+     */
+    public void advanceSyncTime(SyncState state, SyncResult result, Instant startedAt) {
+        if (!result.success()) {
+            Log.warn("Keeping the previous sync time so the failed issues are retried on the next run");
+            return;
+        }
+        state.markSynced(startedAt);
     }
 
     public void completeSync(SyncState state, boolean hasChanges, boolean dryRun) {
