@@ -143,16 +143,12 @@ public class AttachmentOperations {
      * Only uploads.linear.app URLs are downloadable files.
      */
     private boolean isDownloadableAttachment(JiraIssueInput.AttachmentInput attachment) {
-        var url = attachment.url();
-        if (url == null || url.isBlank()) {
-            return false;
-        }
-        return url.contains("uploads.linear.app");
+        return AttachmentDownloader.isLinearUpload(attachment.url());
     }
 
     private void addAttachmentAsComment(String jiraIssueKey, JiraIssueInput.AttachmentInput attachmentInput) {
         try {
-            var attachmentBody = markupFormatter.formatAttachmentForJira(attachmentInput);
+            var attachmentBody = markupFormatter.formatAttachment(attachmentInput);
             commentOperations.addComment(jiraIssueKey, attachmentBody);
             Log.debugf("Added attachment %s info as comment to Jira issue %s", attachmentInput.id(), jiraIssueKey);
         } catch (JiraApiException e) {

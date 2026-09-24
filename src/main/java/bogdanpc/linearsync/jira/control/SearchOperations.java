@@ -67,11 +67,6 @@ public class SearchOperations {
         }
     }
 
-    public List<JiraIssue> getAllIssuesInProject() {
-        var jql = buildProjectQuery();
-        return executePagedIssueSearch(jql);
-    }
-
     List<JiraComment> getComments(String jiraIssueKey) {
         Log.debugf("Fetching comments for Jira issue: %s", jiraIssueKey);
 
@@ -102,40 +97,10 @@ public class SearchOperations {
     }
 
     private String buildSourceIdQuery(String sourceIssueId) {
-        if (!config.hasLinearIdField()) {
+        if (config.hasLinearIdField()) {
             throw new IllegalStateException("Cannot search by Linear ID - jira.custom-field.linear-id not configured");
         }
         return config.jqlByLinearId(sourceIssueId);
-    }
-
-    private String buildProjectQuery() {
-        var projectKey = config.projectKey().orElseThrow(() -> new IllegalStateException("Jira project key not configured"));
-        return String.format("project = %s", projectKey);
-    }
-
-    private List<JiraIssue> executePagedIssueSearch(String jql) {
-        var allIssues = new ArrayList<JiraIssue>();
-        String nextPageToken = null;
-        var maxResults = 50;
-
-        do {
-            try {
-                var response = jiraClient.searchIssues(jql, nextPageToken, maxResults);
-
-                if (response.issues() != null) {
-                    allIssues.addAll(response.issues());
-                }
-
-                nextPageToken = response.nextPageToken();
-
-            } catch (Exception e) {
-                Log.errorf(e, "Failed to fetch Jira issues with query: %s", jql);
-                break;
-            }
-        } while (nextPageToken != null && !nextPageToken.isEmpty());
-
-        Log.infof("Fetched %d Jira issues with query: %s", allIssues.size(), jql);
-        return allIssues;
     }
 
     public List<JiraProject.IssueType> getProjectIssueTypes() {

@@ -1,27 +1,19 @@
 /**
- * Jira Integration Business Component
+ * Writes issues, comments, attachments and status transitions to a Jira Cloud project through the REST API v3.
+ * <p>
+ * Design decisions:
+ * <ul>
+ *   <li>Input arrives as source-neutral {@code JiraIssueInput}, so this component does not depend on Linear.</li>
+ *   <li>Rich text is sent as Atlassian Document Format, converted from markdown.</li>
+ *   <li>Every synced issue carries its source identifier as a {@code [IDENTIFIER]} summary prefix, which makes issues
+ *       findable even without the optional custom field that stores the Linear id.</li>
+ *   <li>Comments are posted by the API user, so the original author and time are rendered into the comment text;
+ *       already posted comments are recognised by their text.</li>
+ *   <li>Status is moved with workflow transitions to one of three target statuses; a workflow without a matching
+ *       transition leaves the issue unchanged.</li>
+ *   <li>The Jira base URL can be derived from an Atlassian Cloud ID, which avoids depending on the site URL.</li>
+ * </ul>
  *
- * This package handles all interactions with the Jira REST API for issue management.
- * It provides a clean abstraction layer over the Jira API with proper error handling,
- * authentication, and data transformation.
- *
- * Architecture follows BCE pattern:
- * - Boundary: REST client interfaces and exception handling
- * - Control: Business logic for Jira operations and coordination
- * - Entity: Data models representing Jira resources
- *
- * Key Capabilities:
- * - Issue creation and updates with field mapping
- * - Comment and attachment synchronization
- * - Custom field handling for Linear issue tracking
- * - Comprehensive error handling with specific exception types
- * - Request/response logging for debugging and monitoring
- *
- * Design Decisions:
- * - Uses MicroProfile REST Client for declarative API calls
- * - Authentication handled via Basic Auth with API tokens
- * - Rich domain models with Jackson serialization support
- * - Pagination support for large result sets
- * - Defensive programming with input validation and error recovery
+ * @see <a href="https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/">Jira Cloud REST API v3</a>
  */
 package bogdanpc.linearsync.jira;

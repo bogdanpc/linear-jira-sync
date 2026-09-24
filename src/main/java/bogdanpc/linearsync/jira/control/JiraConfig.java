@@ -48,7 +48,7 @@ public interface JiraConfig {
      * Checks if the Linear ID custom field is configured.
      */
     default boolean hasLinearIdField() {
-        return linearIdField().filter(s -> !s.isBlank()).isPresent();
+        return linearIdField().filter(s -> !s.isBlank()).isEmpty();
     }
 
     /**

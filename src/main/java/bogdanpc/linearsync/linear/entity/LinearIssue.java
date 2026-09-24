@@ -2,7 +2,6 @@ package bogdanpc.linearsync.linear.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 
 import java.time.Instant;
 import java.util.List;
@@ -19,7 +18,7 @@ public record LinearIssue(
     @JsonProperty("assignee") LinearUser assignee,
     @JsonProperty("creator") LinearUser creator,
     @JsonProperty("team") LinearTeam team,
-    @JsonProperty("labels") @JsonDeserialize(using = LinearLabelsDeserializer.class) LinearLabels labels,
+    @JsonProperty("labels") LinearLabels labels,
     @JsonProperty("comments") LinearComments comments,
     @JsonProperty("attachments") LinearAttachments attachments,
     @JsonProperty("parent") LinearParent parent,
@@ -33,15 +32,7 @@ public record LinearIssue(
     public record LinearState(
         @JsonProperty("id") String id,
         @JsonProperty("name") String name,
-        @JsonProperty("type") String type
-    ) {}
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public record LinearUser(
-        @JsonProperty("id") String id,
-        @JsonProperty("name") String name,
-        @JsonProperty("email") String email,
-        @JsonProperty("displayName") String displayName
+        @JsonProperty("type") LinearStateType type
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -55,10 +46,6 @@ public record LinearIssue(
     public record LinearLabels(
         @JsonProperty("nodes") List<LinearLabel> nodes
     ) {
-        public static LinearLabels empty() {
-            return new LinearLabels(List.of());
-        }
-
         public List<LinearLabel> getNodes() {
             return nodes != null ? nodes : List.of();
         }
@@ -105,12 +92,6 @@ public record LinearIssue(
     ) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record LinearPageInfo(
-        @JsonProperty("hasNextPage") boolean hasNextPage,
-        @JsonProperty("endCursor") String endCursor
-    ) {}
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
     public record LinearParent(
             @JsonProperty("id") String id,
             @JsonProperty("identifier") String identifier,
@@ -121,10 +102,6 @@ public record LinearIssue(
     public record LinearChildren(
             @JsonProperty("nodes") List<LinearChild> nodes,
             @JsonProperty("pageInfo") LinearPageInfo pageInfo) {
-        public static LinearChildren empty() {
-            return new LinearChildren(List.of(), new LinearPageInfo(false, null));
-        }
-
         public List<LinearChild> getNodes() {
             return nodes != null ? nodes : List.of();
         }

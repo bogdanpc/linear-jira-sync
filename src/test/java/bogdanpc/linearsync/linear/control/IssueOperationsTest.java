@@ -1,5 +1,6 @@
 package bogdanpc.linearsync.linear.control;
 
+import bogdanpc.linearsync.linear.entity.LinearStateType;
 import io.quarkiverse.wiremock.devservice.ConnectWireMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -20,7 +21,7 @@ class IssueOperationsTest {
 
     @Test
     void testGetIssues_Success() {
-        var issues = linearService.getIssues("ENG", "started", null);
+        var issues = linearService.getIssues("ENG", LinearStateType.STARTED, null);
 
         assertNotNull(issues);
         assertEquals(1, issues.size());
@@ -34,7 +35,7 @@ class IssueOperationsTest {
 
         assertNotNull(issue.state());
         assertEquals("In Progress", issue.state().name());
-        assertEquals("started", issue.state().type());
+        assertEquals(LinearStateType.STARTED, issue.state().type());
 
         assertNotNull(issue.assignee());
         assertEquals("John Doe", issue.assignee().displayName());
@@ -55,7 +56,7 @@ class IssueOperationsTest {
     @Test
     void testGetIssues_WithFilters() {
         var updatedAfter = Instant.parse("2024-01-01T00:00:00Z");
-        var issues = linearService.getIssues("BACKEND", "started", updatedAfter);
+        var issues = linearService.getIssues("BACKEND", LinearStateType.STARTED, updatedAfter);
 
         assertNotNull(issues);
         assertEquals(0, issues.size());

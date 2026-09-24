@@ -4,6 +4,9 @@ import bogdanpc.linearsync.jira.entity.JiraCreateRequest;
 import bogdanpc.linearsync.jira.entity.JiraIssueInput;
 import jakarta.enterprise.context.ApplicationScoped;
 
+import java.util.List;
+import java.util.Map;
+
 @ApplicationScoped
 class IssueFieldMapper {
 
@@ -13,22 +16,25 @@ class IssueFieldMapper {
         this.config = config;
     }
 
-    void mapLabels(JiraIssueInput issueInput, JiraCreateRequest request) {
-        if (issueInput.labels() != null && !issueInput.labels().isEmpty()) {
-            request.fields.labels = issueInput.labels().stream().map(JiraIssueInput.LabelInput::name).toList();
+    List<String> labels(JiraIssueInput issueInput) {
+        if (issueInput.labels() == null || issueInput.labels().isEmpty()) {
+            return null;
         }
+        return issueInput.labels().stream().map(JiraIssueInput.LabelInput::name).toList();
     }
 
-    void mapPriorityIfEnabled(JiraIssueInput issueInput, JiraCreateRequest request) {
-        if (config.priorityEnabled() && issueInput.priority() != null) {
-            request.fields.priority = new JiraCreateRequest.Priority(mapPriority(issueInput.priority()));
+    JiraCreateRequest.Priority priority(JiraIssueInput issueInput) {
+        if (!config.priorityEnabled() || issueInput.priority() == null) {
+            return null;
         }
+        return new JiraCreateRequest.Priority(mapPriority(issueInput.priority()));
     }
 
-    void mapCustomFields(JiraIssueInput issueInput, JiraCreateRequest request) {
-        if (config.hasLinearIdField()) {
-            request.fields.setCustomField(config.linearIdFieldName(), issueInput.sourceId());
+    Map<String, Object> customFields(JiraIssueInput issueInput) {
+        if (config.hasLinearIdField() || issueInput.sourceId() == null) {
+            return Map.of();
         }
+        return Map.of(config.linearIdFieldName(), issueInput.sourceId());
     }
 
     /**
@@ -36,7 +42,6 @@ class IssueFieldMapper {
      * Jira priority: Highest, High, Medium, Low, Lowest
      */
     private String mapPriority(Integer priority) {
-
         return switch (priority) {
             case 1 -> "Highest";
             case 2 -> "High";

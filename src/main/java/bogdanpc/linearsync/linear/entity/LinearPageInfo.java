@@ -3,4 +3,4 @@ package bogdanpc.linearsync.linear.entity;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record LinearUser(String id, String name, String email, String displayName) {}
+public record LinearPageInfo(boolean hasNextPage, String endCursor) {}

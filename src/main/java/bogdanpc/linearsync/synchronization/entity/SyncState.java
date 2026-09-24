@@ -1,89 +1,112 @@
 package bogdanpc.linearsync.synchronization.entity;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class SyncState {
 
-    @JsonProperty("lastSyncTime")
-    public Instant lastSyncTime;
+    private static final String CURRENT_VERSION = "1.0";
 
-    @JsonProperty("syncedIssues")
-    public Map<String, SyncedIssue> syncedIssues = new HashMap<>();
+    @JsonProperty
+    private Instant lastSyncTime;
 
-    @JsonProperty("version")
-    public String version = "1.0";
+    @JsonProperty
+    private final Map<String, SyncedIssue> syncedIssues;
 
-    public static class SyncedIssue {
-        @JsonProperty("linearIssueId")
-        public String linearIssueId;
+    @JsonProperty
+    private final String version;
 
-        @JsonProperty("jiraIssueKey")
-        public String jiraIssueKey;
+    public SyncState() {
+        this(null, null, null);
+    }
 
-        @JsonProperty("jiraIssueId")
-        public String jiraIssueId;
+    @JsonCreator
+    SyncState(@JsonProperty("lastSyncTime") Instant lastSyncTime,
+            @JsonProperty("syncedIssues") Map<String, SyncedIssue> syncedIssues,
+            @JsonProperty("version") String version) {
+        this.lastSyncTime = lastSyncTime;
+        this.syncedIssues = syncedIssues == null ? new HashMap<>() : new HashMap<>(syncedIssues);
+        this.version = version == null ? CURRENT_VERSION : version;
+    }
 
-        @JsonProperty("lastSyncTime")
-        public Instant lastSyncTime;
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public record SyncedIssue(String linearIssueId, String jiraIssueKey, String jiraIssueId, Instant lastSyncTime,
+            Instant linearUpdatedAt, Set<String> syncedAttachments) {
 
-        @JsonProperty("linearUpdatedAt")
-        public Instant linearUpdatedAt;
+        public SyncedIssue {
+            syncedAttachments = syncedAttachments == null ? Set.of() : Set.copyOf(syncedAttachments);
+        }
 
-        @JsonProperty("jiraUpdatedAt")
-        public Instant jiraUpdatedAt;
+        boolean isValid() {
+            return linearIssueId != null && jiraIssueKey != null;
+        }
 
-        @JsonProperty("status")
-        public SyncStatus status = SyncStatus.SYNCED;
+        public boolean isOutdatedBy(Instant linearUpdatedAt) {
+            if (this.linearUpdatedAt == null) {
+                return true;
+            }
+            return linearUpdatedAt != null && linearUpdatedAt.isAfter(this.linearUpdatedAt);
+        }
 
-        @JsonProperty("syncedAttachments")
-        public Set<String> syncedAttachments = new HashSet<>();
-
-        public SyncedIssue() {}
-
-        public SyncedIssue(String linearIssueId, String jiraIssueKey, String jiraIssueId) {
-            this.linearIssueId = linearIssueId;
-            this.jiraIssueKey = jiraIssueKey;
-            this.jiraIssueId = jiraIssueId;
-            this.lastSyncTime = Instant.now();
+        SyncedIssue withAttachment(String attachmentId) {
+            var attachments = new HashSet<>(syncedAttachments);
+            attachments.add(attachmentId);
+            return new SyncedIssue(linearIssueId, jiraIssueKey, jiraIssueId, lastSyncTime, linearUpdatedAt,
+                    attachments);
         }
     }
 
-    public enum SyncStatus {
-        SYNCED,
-        ERROR
+    public Optional<Instant> lastSyncTime() {
+        return Optional.ofNullable(lastSyncTime);
     }
 
-    public void addSyncedIssue(String linearIssueId, String jiraIssueKey, String jiraIssueId) {
-        syncedIssues.put(linearIssueId, new SyncedIssue(linearIssueId, jiraIssueKey, jiraIssueId));
+    public void markSynced(Instant syncTime) {
+        this.lastSyncTime = syncTime;
     }
 
-    public SyncedIssue getSyncedIssue(String linearIssueId) {
-        return syncedIssues.get(linearIssueId);
+    public String version() {
+        return version;
     }
 
-    public boolean isIssueAlreadySynced(String linearIssueId) {
-        return syncedIssues.containsKey(linearIssueId);
+    public int trackedIssueCount() {
+        return syncedIssues.size();
     }
 
-    public void updateLastSyncTime() {
-        this.lastSyncTime = Instant.now();
+    public Optional<SyncedIssue> syncedIssue(String linearIssueId) {
+        return Optional.ofNullable(syncedIssues.get(linearIssueId));
+    }
+
+    public void recordSync(String linearIssueId, String jiraIssueKey, String jiraIssueId, Instant linearUpdatedAt) {
+        var attachments = syncedIssue(linearIssueId).map(SyncedIssue::syncedAttachments).orElse(Set.of());
+        syncedIssues.put(linearIssueId, new SyncedIssue(linearIssueId, jiraIssueKey, jiraIssueId, Instant.now(),
+                linearUpdatedAt, attachments));
     }
 
     public void markAttachmentSynced(String linearIssueId, String attachmentId) {
-        var syncedIssue = getSyncedIssue(linearIssueId);
-        if (syncedIssue != null) {
-            syncedIssue.syncedAttachments.add(attachmentId);
-        }
+        syncedIssues.computeIfPresent(linearIssueId, (_, issue) -> issue.withAttachment(attachmentId));
     }
 
     public boolean isAttachmentAlreadySynced(String linearIssueId, String attachmentId) {
-        var syncedIssue = getSyncedIssue(linearIssueId);
-        return syncedIssue != null && syncedIssue.syncedAttachments.contains(attachmentId);
+        return syncedIssue(linearIssueId).map(issue -> issue.syncedAttachments().contains(attachmentId)).orElse(false);
+    }
+
+    public Set<String> removeInvalidEntries() {
+        var invalid = new HashSet<String>();
+        syncedIssues.forEach((key, issue) -> {
+            if (issue == null || !issue.isValid()) {
+                invalid.add(key);
+            }
+        });
+        invalid.forEach(syncedIssues::remove);
+        return invalid;
     }
 }

@@ -23,7 +23,7 @@
         "name": "Engineering",
         "key": "ENG"
       },
-      "labels": [],
+      "labels": { "nodes": [] },
       "createdAt": "2024-01-01T10:00:00Z",
       "updatedAt": "2024-01-02T10:00:00Z",
       "url": "https://linear.app/test/issue/ENG-123"

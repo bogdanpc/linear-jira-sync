@@ -1,28 +1,16 @@
 package bogdanpc.linearsync.linear.entity;
 
-/**
- * Linear issue state types used for filtering issues by their workflow state.
- * These values correspond to the 'type' field in Linear's state API.
- */
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
+
+import java.util.Arrays;
+
 public enum LinearStateType {
-    /**
-     * Issues that haven't been started yet (triage, backlog, todo states)
-     */
+    TRIAGE("triage"),
+    BACKLOG("backlog"),
     UNSTARTED("unstarted"),
-
-    /**
-     * Issues currently being worked on (in_progress, in_review states)
-     */
     STARTED("started"),
-
-    /**
-     * Issues that have been completed (done states)
-     */
     COMPLETED("completed"),
-
-    /**
-     * Issues that have been cancelled or abandoned
-     */
     CANCELED("canceled");
 
     private final String value;
@@ -31,25 +19,25 @@ public enum LinearStateType {
         this.value = value;
     }
 
-    public String getValue() {
+    @JsonValue
+    public String value() {
         return value;
     }
 
-    /**
-     * Convert from string value to enum, case-insensitive
-     */
     public static LinearStateType fromValue(String value) {
-        if (value == null) {
-            return null;
+        var type = parse(value);
+        if (type == null) {
+            throw new IllegalArgumentException("Unknown Linear state type: " + value);
         }
+        return type;
+    }
 
-        for (LinearStateType type : values()) {
-            if (type.value.equalsIgnoreCase(value)) {
-                return type;
-            }
-        }
-
-        throw new IllegalArgumentException("Unknown Linear state type: " + value);
+    @JsonCreator
+    static LinearStateType parse(String value) {
+        return Arrays.stream(values())
+                .filter(type -> type.value.equalsIgnoreCase(value))
+                .findFirst()
+                .orElse(null);
     }
 
     @Override

@@ -1,22 +1,17 @@
 /**
- * Configuration management for Linear-Jira synchronization.
+ * Checks, before any API call, that the configuration needed to reach Linear and Jira is complete, so a missing
+ * credential is reported by name instead of surfacing as an HTTP error mid-sync.
  * <p>
- * This component handles loading and validating configuration from multiple sources
- * with the following precedence (highest to lowest):
+ * Values are resolved by MicroProfile Config, highest precedence first:
  * <ol>
- *   <li>Environment variables (e.g., LINEAR_API_TOKEN)</li>
- *   <li>System properties (-D flags)</li>
- *   <li>~/.linear-jira-sync/config.properties (user-specific configuration)</li>
- *   <li>application-local.properties (project-local configuration)</li>
- *   <li>application.properties file (default configuration)</li>
- *   <li>Default values</li>
+ *   <li>system properties, including those set from command-line options such as {@code --state-dir}</li>
+ *   <li>environment variables such as {@code LINEAR_API_TOKEN}</li>
+ *   <li>the Jira URL derived from {@code JIRA_API_CLOUDID}</li>
+ *   <li>the external properties file given with {@code --config}, by default
+ *       {@code ~/.linear-jira-sync/config.properties}</li>
+ *   <li>the bundled {@code application.properties}, which holds the defaults</li>
  * </ol>
- * <p>
- * The configuration supports both file-based configuration for local development
- * and environment variables for production deployments. Environment variables
- * always take precedence, allowing secure credential management in CI/CD pipelines.
- * <p>
- * The ~/.linear-jira-sync/config.properties file is recommended for development
- * as it works across all Linear-Jira sync projects for the current user.
+ * Keeping credentials in environment variables or the external file means they never end up in the application
+ * archive.
  */
 package bogdanpc.linearsync.configuration;

@@ -5,6 +5,8 @@ import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
+import java.util.Map;
+
 @ApplicationScoped
 public class IssueOperations {
 
@@ -54,44 +56,30 @@ public class IssueOperations {
         }
     }
 
-    JiraComment.JiraUser getCurrentUserInfo() {
-        try {
-            var userInfo = jiraClient.getCurrentUser();
-            return new JiraComment.JiraUser(userInfo.accountId(), userInfo.displayName(), userInfo.emailAddress(), true,
-                    null);
-        } catch (JiraApiException e) {
-            Log.errorf(e, "Failed to get current user info");
-            // Return a fallback user
-            return new JiraComment.JiraUser("unknown", "System", "system@example.com", true, null);
-        }
-    }
-
     private JiraCreateRequest buildCreateRequest(JiraIssueInput issueInput) {
         var projectKey = config.projectKey()
                 .orElseThrow(() -> new IllegalStateException("Jira project key not configured"));
 
-        var request = new JiraCreateRequest();
-        request.fields = new JiraCreateRequest.Fields();
-        request.fields.project = new JiraCreateRequest.Project(projectKey);
-        request.fields.summary = String.format("[%s] %s", issueInput.sourceIdentifier(), issueInput.title());
-        request.fields.description = markupFormatter.markdownToAdf(issueInput.description());
-
-        // Determine issue type based on whether this is a subtask
         var isSubtask = issueInput.parentJiraKey() != null && !issueInput.parentJiraKey().isEmpty();
         var issueTypeName = isSubtask ? getSubtaskTypeName() : config.issueType();
-        request.fields.issuetype = new JiraCreateRequest.IssueType(issueTypeName);
-
-        // Set parent if this is a subtask
+        var parent = isSubtask ? new JiraCreateRequest.Parent(issueInput.parentJiraKey()) : null;
         if (isSubtask) {
-            request.fields.parent = new JiraCreateRequest.Parent(issueInput.parentJiraKey());
             Log.debugf("Creating subtask with parent: %s, type: %s", issueInput.parentJiraKey(), issueTypeName);
         }
 
-        issueFieldMapper.mapCustomFields(issueInput, request);
-        issueFieldMapper.mapPriorityIfEnabled(issueInput, request);
-        issueFieldMapper.mapLabels(issueInput, request);
+        return new JiraCreateRequest(new JiraCreateRequest.Fields(
+                new JiraCreateRequest.Project(projectKey),
+                summary(issueInput),
+                markupFormatter.markdownToAdf(issueInput.description()),
+                new JiraCreateRequest.IssueType(issueTypeName),
+                issueFieldMapper.priority(issueInput),
+                issueFieldMapper.labels(issueInput),
+                parent,
+                issueFieldMapper.customFields(issueInput)));
+    }
 
-        return request;
+    private static String summary(JiraIssueInput issueInput) {
+        return "[%s] %s".formatted(issueInput.sourceIdentifier(), issueInput.title());
     }
 
     private String getSubtaskTypeName() {
@@ -118,14 +106,14 @@ public class IssueOperations {
     }
 
     private JiraCreateRequest buildUpdateRequest(JiraIssueInput issueInput) {
-        var request = new JiraCreateRequest();
-        request.fields = new JiraCreateRequest.Fields();
-        request.fields.summary = String.format("[%s] %s", issueInput.sourceIdentifier(), issueInput.title());
-        request.fields.description = markupFormatter.markdownToAdf(issueInput.description());
-
-        issueFieldMapper.mapPriorityIfEnabled(issueInput, request);
-        issueFieldMapper.mapLabels(issueInput, request);
-
-        return request;
+        return new JiraCreateRequest(new JiraCreateRequest.Fields(
+                null,
+                summary(issueInput),
+                markupFormatter.markdownToAdf(issueInput.description()),
+                null,
+                issueFieldMapper.priority(issueInput),
+                issueFieldMapper.labels(issueInput),
+                null,
+                Map.of()));
     }
 }

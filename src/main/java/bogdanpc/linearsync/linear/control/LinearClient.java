@@ -19,15 +19,15 @@ import org.eclipse.microprofile.rest.client.inject.RegisterRestClient;
 @ClientHeaderParam(name = "Authorization", value = "${linear.api.token}")
 public interface LinearClient {
 
-  @POST
-  @Path("/")
-  LinearResponse<LinearIssue> getIssues(GraphQLQuery query);
+    @POST
+    @Path("/")
+    LinearResponse<LinearIssue> getIssues(GraphQLQuery query);
 
-  @POST
-  @Path("/")
-  LinearUserResponse getCurrentUser(GraphQLQuery query);
+    @POST
+    @Path("/")
+    LinearUserResponse getCurrentUser(GraphQLQuery query);
 
-  @POST
-  @Path("/")
-  LinearIssueResponse getIssue(GraphQLQuery query);
+    @POST
+    @Path("/")
+    LinearIssueResponse getIssue(GraphQLQuery query);
 }

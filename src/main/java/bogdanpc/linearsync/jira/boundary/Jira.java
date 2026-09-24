@@ -4,6 +4,7 @@ import bogdanpc.linearsync.jira.control.*;
 import bogdanpc.linearsync.jira.entity.JiraIssue;
 import bogdanpc.linearsync.jira.entity.JiraIssueInput;
 import bogdanpc.linearsync.jira.entity.JiraProject;
+import bogdanpc.linearsync.jira.entity.WorkflowStatus;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.util.List;
@@ -44,10 +45,6 @@ public class Jira {
         return searchOperations.findIssueByIdentifierInSummary(sourceIdentifier);
     }
 
-    public List<JiraIssue> getAllIssuesInProject() {
-        return searchOperations.getAllIssuesInProject();
-    }
-
     public boolean testConnection() {
         return issueOperations.testConnection();
     }
@@ -64,8 +61,8 @@ public class Jira {
         return searchOperations.getProjectIssueTypes();
     }
 
-    public void transitionIssueStatus(String jiraIssueKey, String linearStateType) {
-        transitionOperations.transitionIfNeeded(jiraIssueKey, linearStateType);
+    public void transitionIssueStatus(String jiraIssueKey, WorkflowStatus target) {
+        transitionOperations.transitionIfNeeded(jiraIssueKey, target);
     }
 
 }

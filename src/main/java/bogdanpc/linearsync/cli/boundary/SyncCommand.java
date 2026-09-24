@@ -3,6 +3,7 @@ package bogdanpc.linearsync.cli.boundary;
 import bogdanpc.linearsync.configuration.control.SyncConfiguration;
 import bogdanpc.linearsync.linear.entity.LinearStateType;
 import bogdanpc.linearsync.synchronization.control.Synchronizer;
+import bogdanpc.linearsync.synchronization.entity.SyncAction;
 import bogdanpc.linearsync.synchronization.entity.SyncResult;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.Dependent;
@@ -20,6 +21,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 @Dependent
 @CommandDefinition(name = "sync", description = "Synchronize Linear issues to Jira", generateHelp = true)
@@ -63,7 +65,7 @@ public class SyncCommand implements Command<CommandInvocation> {
 
     @Override
     public CommandResult execute(CommandInvocation invocation) {
-        if (!output.applyLogLevel()) {
+        if (output.applyLogLevel()) {
             return CommandResult.FAILURE;
         }
 
@@ -85,14 +87,11 @@ public class SyncCommand implements Command<CommandInvocation> {
         printSyncHeader(updatedAfterInstant);
 
         try {
-            synchronizer.setDryRun(dryRun);
-
-            var result = issueIdentifier != null ? synchronizer.synchronizeSingleIssue(issueIdentifier)
-                    : synchronizer.synchronize(teamKey, stateType != null ? stateType.getValue() : null,
-                            updatedAfterInstant, forceFullSync);
+            var result = issueIdentifier != null ? synchronizer.synchronizeSingleIssue(issueIdentifier, dryRun)
+                    : synchronizer.synchronize(teamKey, stateType, updatedAfterInstant, forceFullSync, dryRun);
 
             printSyncResults(result);
-            return result.success ? CommandResult.SUCCESS : CommandResult.FAILURE;
+            return result.success() ? CommandResult.SUCCESS : CommandResult.FAILURE;
 
         } catch (RuntimeException e) {
             Log.error("Error: Synchronization failed - " + e.getMessage());
@@ -120,7 +119,7 @@ public class SyncCommand implements Command<CommandInvocation> {
         }
 
         Log.debugf("  Team: %s | State: %s | Since: %s", teamKey != null ? teamKey : "all",
-                stateType != null ? stateType.getValue() : "all", formatSinceFilter(updatedAfterInstant));
+                stateType != null ? stateType : "all", formatSinceFilter(updatedAfterInstant));
     }
 
     private String formatSinceFilter(Instant updatedAfterInstant) {
@@ -132,29 +131,28 @@ public class SyncCommand implements Command<CommandInvocation> {
     }
 
     private void printSyncResults(SyncResult result) {
-        Log.debug(result.getSummary());
-
-        if (!result.issueResults.isEmpty()) {
-            Log.debug("");
-            Log.debug("Detailed Results:");
-            result.issueResults.forEach(issueResult -> Log.debug("  " + issueResult));
-        }
+        Log.debugf("Sync finished in %dms", result.duration().toMillis());
+        result.issueResults().forEach(issueResult -> Log.debug("  " + issueResult));
 
         var counts = new ArrayList<String>();
-        if (result.createdCount > 0)
-            counts.add(result.createdCount + " created");
-        if (result.updatedCount > 0)
-            counts.add(result.updatedCount + " updated");
-        if (result.skippedCount > 0)
-            counts.add(result.skippedCount + " skipped");
-        if (!result.errors.isEmpty())
-            counts.add(result.errors.size() + " errors");
+        addCount(counts, result.count(SyncAction.CREATE), "created");
+        addCount(counts, result.count(SyncAction.UPDATE), "updated");
+        addCount(counts, result.count(SyncAction.RECOVER), "recovered");
+        addCount(counts, result.count(SyncAction.SKIP), "skipped");
+        var errors = result.allErrors();
+        addCount(counts, errors.size(), "errors");
 
         Log.info(counts.isEmpty() ? "Done - no changes" : "Done - " + String.join(", ", counts));
 
-        if (!result.errors.isEmpty()) {
+        if (!errors.isEmpty()) {
             Log.error("Errors:");
-            result.errors.forEach(error -> Log.error("  " + error));
+            errors.forEach(error -> Log.error("  " + error));
+        }
+    }
+
+    private static void addCount(List<String> counts, long count, String label) {
+        if (count > 0) {
+            counts.add(count + " " + label);
         }
     }
 }

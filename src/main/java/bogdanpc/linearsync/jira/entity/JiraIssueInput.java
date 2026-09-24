@@ -14,8 +14,7 @@ public record JiraIssueInput(
     String title,
     String description,
     Integer priority,
-    String stateName,
-    String stateType,
+    WorkflowStatus status,
     String assigneeEmail,
     String assigneeDisplayName,
     String creatorEmail,
@@ -32,7 +31,7 @@ public record JiraIssueInput(
 ) {
 
     public JiraIssueInput withAttachments(List<AttachmentInput> replacement) {
-        return new JiraIssueInput(sourceId, sourceIdentifier, title, description, priority, stateName, stateType,
+        return new JiraIssueInput(sourceId, sourceIdentifier, title, description, priority, status,
                 assigneeEmail, assigneeDisplayName, creatorEmail, creatorDisplayName, teamName, teamKey, labels,
                 comments, replacement, createdAt, updatedAt, sourceUrl, parentJiraKey);
     }

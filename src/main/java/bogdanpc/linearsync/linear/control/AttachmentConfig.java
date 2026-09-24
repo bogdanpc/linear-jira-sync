@@ -20,6 +20,6 @@ public interface AttachmentConfig {
 
         @WithName("max-size")
         @WithDefault("10485760")
-        long maxSize();
+        int maxSize();
     }
 }

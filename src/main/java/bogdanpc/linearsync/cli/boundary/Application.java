@@ -18,7 +18,7 @@ public class Application implements QuarkusApplication {
         return result.isSuccess() ? 0 : result.getExitCode();
     }
 
-    public static void main(String... args) {
+    static void main(String... args) {
         bootstrapConfigLocations(args);
         Quarkus.run(Application.class, args);
     }

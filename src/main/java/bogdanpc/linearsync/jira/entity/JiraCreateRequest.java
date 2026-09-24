@@ -1,82 +1,30 @@
 package bogdanpc.linearsync.jira.entity;
 
 import com.fasterxml.jackson.annotation.JsonAnyGetter;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonProperty;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class JiraCreateRequest {
-
-    @JsonProperty("fields")
-    public Fields fields;
+public record JiraCreateRequest(Fields fields) {
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    public static class Fields {
-        @JsonProperty("project")
-        public Project project;
-
-        @JsonProperty("summary")
-        public String summary;
-
-        @JsonProperty("description")
-        public Object description;
-
-        @JsonProperty("issuetype")
-        public IssueType issuetype;
-
-        @JsonProperty("priority")
-        public Priority priority;
-
-        @JsonProperty("assignee")
-        public Assignee assignee;
-
-        @JsonProperty("labels")
-        public List<String> labels;
-
-        @JsonProperty("parent")
-        public Parent parent;
-
-        // Dynamic fields for custom properties
-        public Map<String, Object> customFields = new HashMap<>();
+    public record Fields(Project project, String summary, AdfNode description, IssueType issuetype, Priority priority,
+            List<String> labels, Parent parent, @JsonIgnore Map<String, Object> customFields) {
 
         @JsonAnyGetter
-        public Map<String, Object> getCustomFields() {
+        Map<String, Object> customFieldValues() {
             return customFields;
         }
-
-        public void setCustomField(String fieldName, Object value) {
-            if (value != null) {
-                customFields.put(fieldName, value);
-            }
-        }
     }
 
-    public record Project(@JsonProperty("key") String key) {}
+    public record Project(String key) {}
 
-    public record IssueType(@JsonProperty("name") String name) {}
+    public record IssueType(String name) {}
 
-    public record Priority(@JsonProperty("name") String name) {}
+    public record Priority(String name) {}
 
-    public record Assignee(@JsonProperty("accountId") String accountId) {}
-
-    public record Parent(@JsonProperty("key") String key) {}
-
-    public record Description(
-            @JsonProperty("type") String type,
-            @JsonProperty("version") int version,
-            @JsonProperty("content") List<Map<String, Object>> content) {
-        public Description(String text) {
-            this("doc", 1, List.of(
-                    Map.of(
-                            "type", "paragraph",
-                            "content", List.of(
-                                    Map.of(
-                                            "type", "text",
-                                            "text", text != null ? text : "")))));
-        }
-    }
+    public record Parent(String key) {}
 }

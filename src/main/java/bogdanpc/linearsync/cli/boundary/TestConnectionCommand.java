@@ -34,7 +34,7 @@ public class TestConnectionCommand implements Command<CommandInvocation> {
 
     @Override
     public CommandResult execute(CommandInvocation invocation) {
-        if (!output.applyLogLevel() || !ConfigurationCheck.isValid(config)) {
+        if (output.applyLogLevel() || !ConfigurationCheck.isValid(config)) {
             return CommandResult.FAILURE;
         }
 

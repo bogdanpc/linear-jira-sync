@@ -1,36 +1,34 @@
 package bogdanpc.linearsync.jira.control;
 
+import bogdanpc.linearsync.jira.entity.AdfNode;
 import bogdanpc.linearsync.jira.entity.JiraComment;
 import bogdanpc.linearsync.jira.entity.JiraIssueInput;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.regex.Pattern;
 
 @ApplicationScoped
 public class CommentOperations {
 
+    private static final Pattern IMAGE_PATTERN = Pattern.compile("!\\[[^]]*]\\([^)]+\\)");
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
     private final JiraClient jiraClient;
     private final SearchOperations searchOperations;
     private final MarkupFormatter markupFormatter;
-    private final IssueOperations issueOperations;
 
-    CommentOperations(@RestClient JiraClient jiraClient, SearchOperations searchOperations, MarkupFormatter markupFormatter, IssueOperations issueOperations) {
+    CommentOperations(@RestClient JiraClient jiraClient, SearchOperations searchOperations, MarkupFormatter markupFormatter) {
         this.jiraClient = jiraClient;
         this.searchOperations = searchOperations;
         this.markupFormatter = markupFormatter;
-        this.issueOperations = issueOperations;
     }
 
-    JiraComment addComment(String jiraIssueKey, JiraComment.JiraContent body) {
+    void addComment(String jiraIssueKey, AdfNode body) {
         Log.debugf("Adding comment to Jira issue: %s", jiraIssueKey);
-        var comment = JiraComment.createFromContent(body, issueOperations.getCurrentUserInfo());
-        return jiraClient.addComment(jiraIssueKey, comment);
+        jiraClient.addComment(jiraIssueKey, JiraComment.withBody(body));
     }
 
     public void syncComments(String jiraIssueKey, JiraIssueInput issueInput) {
@@ -42,58 +40,37 @@ public class CommentOperations {
         Log.infof("Syncing %d comments from source issue %s to Jira issue %s", issueInput.comments().size(),
                 issueInput.sourceIdentifier(), jiraIssueKey);
 
-        var existingComments = searchOperations.getComments(jiraIssueKey);
-        var existingCommentTexts = extractExistingCommentTexts(existingComments);
+        var existingTexts = searchOperations.getComments(jiraIssueKey).stream()
+                .map(comment -> normalize(comment.plainText()))
+                .filter(text -> !text.isEmpty())
+                .toList();
 
         issueInput.comments().stream()
-                .filter(c -> !isCommentAlreadySynced(c, existingCommentTexts))
-                .forEach(c -> addComment(jiraIssueKey, markupFormatter.formatCommentForJira(c)));
+                .map(comment -> new RenderedComment(comment, markupFormatter.formatComment(comment)))
+                .filter(rendered -> !rendered.isAlreadyIn(existingTexts))
+                .forEach(rendered -> addComment(jiraIssueKey, rendered.body()));
     }
 
-    private static final Pattern IMAGE_PATTERN = Pattern.compile("!\\[[^]]*]\\([^)]+\\)");
+    private static String normalize(String text) {
+        return WHITESPACE.matcher(text).replaceAll(" ").strip();
+    }
 
     /**
-     * Detects already-synced comments by matching body text or author+timestamp
-     * against existing Jira comment text. Handles both old (plain text) and
-     * new (ADF) format comments.
+     * A comment counts as synced when Jira holds its rendered text. The raw-body and author+ISO-timestamp checks
+     * recognise comments posted by earlier versions, which stored the body as plain text.
      */
-    private boolean isCommentAlreadySynced(JiraIssueInput.CommentInput comment, Set<String> existingTexts) {
-        var bodyText = comment.body() != null
-                ? IMAGE_PATTERN.matcher(comment.body()).replaceAll("").strip()
-                : "";
+    private record RenderedComment(JiraIssueInput.CommentInput source, AdfNode body) {
 
-        if (!bodyText.isEmpty()) {
-            var normalizedBody = bodyText.replaceAll("\\s+", " ");
-            for (var existing : existingTexts) {
-                if (existing.contains(normalizedBody)) {
-                    return true;
-                }
-            }
+        boolean isAlreadyIn(List<String> existingTexts) {
+            var rendered = normalize(body.plainText());
+            var rawBody = source.body() == null ? "" : normalize(IMAGE_PATTERN.matcher(source.body()).replaceAll(""));
+            var author = source.authorDisplayName() != null ? source.authorDisplayName() : source.authorName();
+            var isoTimestamp = source.createdAt() == null ? null : source.createdAt().toString();
+
+            return existingTexts.stream().anyMatch(existing -> existing.equals(rendered)
+                    || (!rawBody.isEmpty() && existing.contains(rawBody))
+                    || (author != null && isoTimestamp != null && existing.contains(author)
+                            && existing.contains(isoTimestamp)));
         }
-
-        var author = comment.authorDisplayName() != null ? comment.authorDisplayName() : comment.authorName();
-        if (author != null && comment.createdAt() != null) {
-            var isoTimestamp = comment.createdAt().toString();
-            for (var existing : existingTexts) {
-                if (existing.contains(author) && existing.contains(isoTimestamp)) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
-
-    private HashSet<String> extractExistingCommentTexts(List<JiraComment> existingComments) {
-        var existingCommentTexts = new HashSet<String>();
-
-        for (var existingComment : existingComments) {
-            var plainText = existingComment.extractPlainText();
-            if (!plainText.isEmpty()) {
-                existingCommentTexts.add(plainText.trim());
-            }
-        }
-
-        return existingCommentTexts;
     }
 }

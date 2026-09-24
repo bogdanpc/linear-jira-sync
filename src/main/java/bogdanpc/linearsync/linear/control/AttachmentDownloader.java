@@ -4,9 +4,7 @@ import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -18,191 +16,89 @@ import java.util.Optional;
 @ApplicationScoped
 public class AttachmentDownloader {
 
+    private static final String LINEAR_UPLOAD_HOST = "uploads.linear.app";
+
     private final LinearConfig linearConfig;
     private final AttachmentConfig attachmentConfig;
-    private final HttpClient httpClient;
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(30))
+            .build();
 
     AttachmentDownloader(LinearConfig linearConfig, AttachmentConfig attachmentConfig) {
         this.linearConfig = linearConfig;
         this.attachmentConfig = attachmentConfig;
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(30))
-                .build();
     }
 
-    public Optional<File> downloadAttachment(String attachmentId, String attachmentUrl, String filename) {
-        if (!isValidAttachmentRequest(attachmentId, attachmentUrl)) {
-            return Optional.empty();
+    public static boolean isLinearUpload(String url) {
+        if (url == null) {
+            return false;
         }
-
-        Log.debugf("Downloading attachment %s from %s", attachmentId, attachmentUrl);
-
-        var response = sendRequest(attachmentId, attachmentUrl);
-        if (response.isEmpty()) {
-            return Optional.empty();
+        try {
+            var uri = URI.create(url);
+            return "https".equals(uri.getScheme()) && LINEAR_UPLOAD_HOST.equalsIgnoreCase(uri.getHost());
+        } catch (IllegalArgumentException _) {
+            return false;
         }
+    }
 
-        var maxSize = attachmentConfig.download().maxSize();
-        var contentLength = response.get().headers().firstValueAsLong("content-length");
-        if (contentLength.isPresent() && contentLength.getAsLong() > maxSize) {
-            Log.warnf("Attachment %s is too large (%d bytes). Max allowed: %d bytes",
-                     attachmentId, contentLength.getAsLong(), maxSize);
+    public Optional<File> downloadAttachment(String attachmentId, String url, String filename) {
+        if (!isLinearUpload(url)) {
+            Log.warnf("Refusing to download attachment %s from non-Linear URL: %s", attachmentId, url);
             return Optional.empty();
         }
 
         try {
-            var tempFile = createTempFile(filename);
-            if (writeToFile(response.get().body(), tempFile, attachmentId)) {
-                Log.debugf("Successfully downloaded attachment %s to %s", attachmentId, tempFile.getAbsolutePath());
-                return Optional.of(tempFile);
+            var content = fetch(attachmentId, url);
+            if (content.isEmpty()) {
+                return Optional.empty();
             }
-            return Optional.empty();
+            return Optional.of(writeTempFile(filename, content.get()));
         } catch (IOException e) {
-            Log.errorf(e, "Failed to create temp file for attachment %s", attachmentId);
+            Log.errorf(e, "Failed to download attachment %s from %s", attachmentId, url);
+            return Optional.empty();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            Log.errorf(e, "Download interrupted for attachment %s", attachmentId);
             return Optional.empty();
         }
     }
 
-    private Optional<HttpResponse<InputStream>> sendRequest(String attachmentId, String attachmentUrl) {
+    public void cleanupTempFile(File file) {
         try {
-            var request = buildRequest(attachmentUrl);
-            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            Files.deleteIfExists(file.toPath());
+            Files.deleteIfExists(file.toPath().getParent());
+        } catch (IOException e) {
+            Log.warnf(e, "Failed to delete temporary file %s", file);
+        }
+    }
 
+    private Optional<byte[]> fetch(String attachmentId, String url) throws IOException, InterruptedException {
+        var request = HttpRequest.newBuilder(URI.create(url))
+                .timeout(Duration.ofSeconds(attachmentConfig.download().timeout()))
+                .header("Authorization", "Bearer " + linearConfig.api().token().orElseThrow())
+                .build();
+        var response = httpClient.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        try (var body = response.body()) {
             if (response.statusCode() != 200) {
                 Log.warnf("Failed to download attachment %s. HTTP status: %d", attachmentId, response.statusCode());
                 return Optional.empty();
             }
 
-            return Optional.of(response);
-        } catch (IOException e) {
-            Log.errorf(e, "Failed to download attachment %s from %s", attachmentId, attachmentUrl);
-            return Optional.empty();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            Log.errorf(e, "Download interrupted for attachment %s from %s", attachmentId, attachmentUrl);
-            return Optional.empty();
-        }
-    }
-
-    private HttpRequest buildRequest(String url) {
-        var requestBuilder = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .timeout(Duration.ofSeconds(attachmentConfig.download().timeout()))
-                .GET();
-
-        requestBuilder.header("Authorization", "Bearer " + linearConfig.api().token().orElseThrow());
-
-        return requestBuilder.build();
-    }
-
-    private File createTempFile(String originalFilename) throws IOException {
-        var sanitizedFilename = sanitizeFilename(originalFilename);
-        var extension = getFileExtension(sanitizedFilename);
-        var baseName = getBaseName(sanitizedFilename);
-
-        return Files.createTempFile("linear-attachment-" + baseName + "-", extension).toFile();
-    }
-
-    private boolean writeToFile(InputStream inputStream, File tempFile, String attachmentId) {
-        try (var fos = new FileOutputStream(tempFile);
-             var is = inputStream) {
-
-            var buffer = new byte[8192];
-            int bytesRead;
-            long totalBytes = 0;
-
-            while ((bytesRead = is.read(buffer)) != -1) {
-                totalBytes += bytesRead;
-                if (totalBytes > attachmentConfig.download().maxSize()) {
-                    Log.warnf("Attachment %s exceeded max size during download. Aborting.", attachmentId);
-                    Files.delete(tempFile.toPath());
-                    return false;
-                }
-                fos.write(buffer, 0, bytesRead);
+            var maxSize = attachmentConfig.download().maxSize();
+            var content = body.readNBytes(maxSize + 1);
+            if (content.length > maxSize) {
+                Log.warnf("Attachment %s exceeds the maximum size of %d bytes", attachmentId, maxSize);
+                return Optional.empty();
             }
-
-            Log.debugf("Downloaded %d bytes for attachment %s", totalBytes, attachmentId);
-            return true;
-
-        } catch (IOException e) {
-            Log.errorf(e, "Failed to write attachment %s to file %s", attachmentId, tempFile.getAbsolutePath());
-            if (tempFile.exists()) {
-                 tempFile.delete();
-            }
-            return false;
+            return Optional.of(content);
         }
     }
 
-    private String sanitizeFilename(String filename) {
-        if (filename == null || filename.trim().isEmpty()) {
-            return "attachment";
-        }
-        return filename.replaceAll("[^a-zA-Z0-9._-]", "_");
-    }
-
-    private String getFileExtension(String filename) {
-        var lastDot = filename.lastIndexOf('.');
-        if (lastDot > 0 && lastDot < filename.length() - 1) {
-            return filename.substring(lastDot);
-        }
-        return ".tmp";
-    }
-
-    private String getBaseName(String filename) {
-        var lastDot = filename.lastIndexOf('.');
-        if (lastDot > 0) {
-            return filename.substring(0, lastDot);
-        }
-        return filename;
-    }
-
-    public void cleanupTempFile(File tempFile) {
-        if (tempFile != null && tempFile.exists()) {
-            try {
-                if (tempFile.delete()) {
-                    Log.debugf("Cleaned up temporary file: %s", tempFile.getAbsolutePath());
-                } else {
-                    Log.warnf("Failed to delete temporary file: %s", tempFile.getAbsolutePath());
-                }
-            } catch (SecurityException e) {
-                Log.warnf(e, "Error cleaning up temporary file: %s", tempFile.getAbsolutePath());
-            }
-        }
-    }
-
-    private boolean isValidAttachmentRequest(String attachmentId, String attachmentUrl) {
-        if (attachmentId == null || attachmentId.trim().isEmpty()) {
-            Log.warnf("Invalid attachment ID provided: %s", attachmentId);
-            return false;
-        }
-
-        if (attachmentUrl == null || attachmentUrl.trim().isEmpty()) {
-            Log.warnf("No URL provided for attachment %s", attachmentId);
-            return false;
-        }
-
-        if (!isValidUrl(attachmentUrl)) {
-            Log.warnf("Invalid URL format for attachment %s: %s", attachmentId, attachmentUrl);
-            return false;
-        }
-
-        return true;
-    }
-
-    private boolean isValidUrl(String url) {
-        if (url == null || url.isBlank()) {
-            return false;
-        }
-
-        if (!url.startsWith("http://") && !url.startsWith("https://")) {
-            return false;
-        }
-
-        try {
-            var uri = URI.create(url);
-            return uri.getHost() != null;
-        } catch (IllegalArgumentException _) {
-            return false;
-        }
+    private static File writeTempFile(String filename, byte[] content) throws IOException {
+        var name = filename == null || filename.isBlank()
+                ? "attachment"
+                : filename.replaceAll("[^a-zA-Z0-9._-]", "_");
+        var file = Files.createTempDirectory("linear-attachment-").resolve(name);
+        return Files.write(file, content).toFile();
     }
 }

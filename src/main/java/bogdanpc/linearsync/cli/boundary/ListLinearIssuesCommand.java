@@ -44,7 +44,7 @@ public class ListLinearIssuesCommand implements Command<CommandInvocation> {
 
     @Override
     public CommandResult execute(CommandInvocation invocation) {
-        if (!output.applyLogLevel()) {
+        if (output.applyLogLevel()) {
             return CommandResult.FAILURE;
         }
 
@@ -60,7 +60,7 @@ public class ListLinearIssuesCommand implements Command<CommandInvocation> {
             Log.info("Fetching Linear issues...");
             Log.debug("Configuration:");
             Log.debug("  Team: " + (teamKey != null ? teamKey : "all"));
-            Log.debug("  State: " + (stateType != null ? stateType.getValue() : "all"));
+            Log.debug("  State: " + (stateType != null ? stateType : "all"));
             Log.debug("  Updated After: " + (updatedAfterInstant != null ? updatedAfterInstant : "any"));
             Log.debug("  Scope: " + (showAll ? "all issues" : "my issues only"));
 
@@ -105,9 +105,8 @@ public class ListLinearIssuesCommand implements Command<CommandInvocation> {
     }
 
     private List<LinearIssue> getLinearIssues(Instant updatedAfterInstant) {
-        var state = stateType != null ? stateType.getValue() : null;
-        return showAll ? linearService.getIssues(teamKey, state, updatedAfterInstant)
-                : linearService.getMyIssues(teamKey, state, updatedAfterInstant);
+        return showAll ? linearService.getIssues(teamKey, stateType, updatedAfterInstant)
+                : linearService.getMyIssues(teamKey, stateType, updatedAfterInstant);
     }
 
     private Instant parseUpdatedAfter() {

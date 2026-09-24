@@ -18,12 +18,6 @@ public record LinearResponse<T>(
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record Issues<T>(
         @JsonProperty("nodes") List<T> nodes,
-        @JsonProperty("pageInfo") PageInfo pageInfo
-    ) {}
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    public record PageInfo(
-        @JsonProperty("hasNextPage") boolean hasNextPage,
-        @JsonProperty("endCursor") String endCursor
+        @JsonProperty("pageInfo") LinearPageInfo pageInfo
     ) {}
 }

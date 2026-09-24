@@ -1,7 +1,9 @@
 package bogdanpc.linearsync.synchronization.control;
 
 import bogdanpc.linearsync.jira.entity.JiraIssueInput;
+import bogdanpc.linearsync.jira.entity.WorkflowStatus;
 import bogdanpc.linearsync.linear.entity.LinearIssue;
+import bogdanpc.linearsync.linear.entity.LinearStateType;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.util.List;
@@ -14,10 +16,6 @@ import java.util.List;
 @ApplicationScoped
 public class IssueDataTransfer {
 
-    public JiraIssueInput mapToJiraIssueInput(LinearIssue linearIssue) {
-        return mapToJiraIssueInput(linearIssue, null);
-    }
-
     public JiraIssueInput mapToJiraIssueInput(LinearIssue linearIssue, String parentJiraKey) {
         if (linearIssue == null) {
             return null;
@@ -29,8 +27,7 @@ public class IssueDataTransfer {
                 linearIssue.title(),
                 linearIssue.description(),
                 linearIssue.priority(),
-                linearIssue.state() != null ? linearIssue.state().name() : null,
-                linearIssue.state() != null ? linearIssue.state().type() : null,
+                linearIssue.state() != null ? workflowStatus(linearIssue.state().type()) : null,
                 linearIssue.assignee() != null ? linearIssue.assignee().email() : null,
                 linearIssue.assignee() != null ? linearIssue.assignee().displayName() : null,
                 linearIssue.creator() != null ? linearIssue.creator().email() : null,
@@ -44,6 +41,15 @@ public class IssueDataTransfer {
                 linearIssue.updatedAt(),
                 linearIssue.url(),
                 parentJiraKey);
+    }
+
+    private static WorkflowStatus workflowStatus(LinearStateType stateType) {
+        return switch (stateType) {
+            case null -> null;
+            case TRIAGE, BACKLOG, UNSTARTED -> WorkflowStatus.TO_DO;
+            case STARTED -> WorkflowStatus.IN_PROGRESS;
+            case COMPLETED, CANCELED -> WorkflowStatus.DONE;
+        };
     }
 
     private List<JiraIssueInput.LabelInput> mapLabels(LinearIssue linearIssue) {

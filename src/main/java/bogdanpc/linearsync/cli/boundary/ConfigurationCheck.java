@@ -18,8 +18,7 @@ final class ConfigurationCheck {
             Log.error("");
             Log.error("Please ensure all required configuration is set via:");
             Log.error("1. Environment variables (recommended for credentials)");
-            Log.error("2. application-local.properties file (see application-local.properties.example)");
-            Log.error("3. application.properties file");
+            Log.error("2. ~/.linear-jira-sync/config.properties, or another file passed with --config");
             return false;
         }
     }

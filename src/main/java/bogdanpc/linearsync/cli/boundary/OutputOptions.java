@@ -25,10 +25,10 @@ public class OutputOptions {
     boolean applyLogLevel() {
         if (quiet && verbose) {
             Log.error("Error: Cannot use both --quiet and --verbose options");
-            return false;
+            return true;
         }
 
         LoggingConfig.configure(quiet, verbose);
-        return true;
+        return false;
     }
 }

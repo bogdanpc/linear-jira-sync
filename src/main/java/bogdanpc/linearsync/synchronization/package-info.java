@@ -1,35 +1,17 @@
 /**
- * Synchronization Orchestration Business Component
- *
- * This package contains the core business logic for orchestrating the synchronization
- * process between Linear and Jira systems. It coordinates data retrieval, transformation,
- * state management, and the actual sync operations.
- *
- * Architecture follows BCE pattern:
- * - Control: Sync orchestration, field mapping, and state management logic
- * - Entity: Sync state, results, and mapping configuration data
- *
- * Key Responsibilities:
- * - Coordinating the overall synchronization workflow
- * - Managing incremental sync state and persistence
- * - Field mapping and data transformation between Linear and Jira
- * - Conflict resolution and duplicate prevention
- * - Progress tracking and result reporting
- *
- * Design Decisions:
- * - Stateful synchronization with persistent tracking via JSON files
- * - Incremental updates based on modification timestamps
- * - Comprehensive field mapping with priority and label support
- * - Dry-run capability for testing without actual modifications
- * - Transactional state updates to ensure consistency
- * - Rich result reporting with detailed success/error information
- *
- * The synchronization process follows these phases:
- * 1. State loading and validation
- * 2. Linear data retrieval with filtering
- * 3. Existing Jira issue detection
- * 4. Data transformation and mapping
- * 5. Jira issue creation/updates
- * 6. State persistence and result reporting
+ * Decides what has to change in Jira for the Linear issues of a run, and remembers what was synced.
+ * <p>
+ * Design decisions:
+ * <ul>
+ *   <li>The sync state file is the only memory between runs. It maps Linear ids to Jira keys, stores the Linear
+ *       {@code updatedAt} of the last sync to skip unchanged issues, and records uploaded attachments. The state is
+ *       written only after a run that changed something, and backed up before each run.</li>
+ *   <li>If the state is lost, issues are recovered by finding the {@code [IDENTIFIER]} prefix in Jira summaries
+ *       instead of being created a second time.</li>
+ *   <li>Linear sub-issues become Jira subtasks, so parents are synced before their children. Related issues outside
+ *       the fetched batch are loaded from Linear only when they were never synced.</li>
+ *   <li>A failing issue does not stop the run; comments, attachments and status transitions are best effort and are
+ *       retried with the next update of the issue.</li>
+ * </ul>
  */
 package bogdanpc.linearsync.synchronization;

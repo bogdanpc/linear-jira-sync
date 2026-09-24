@@ -12,7 +12,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.Comparator;
-import java.util.HashMap;
 
 @ApplicationScoped
 public class SyncStateRepository {
@@ -60,7 +59,7 @@ public class SyncStateRepository {
         try {
             var content = Files.readString(stateFilePath);
             var state = objectMapper.readValue(content, SyncState.class);
-            Log.debugf("Loaded state: %d issues tracked", state.syncedIssues.size());
+            Log.debugf("Loaded state: %d issues tracked", state.trackedIssueCount());
             return state;
         } catch (IOException e) {
             Log.errorf(e, "Failed to load state from: %s", stateFilePath);
@@ -73,7 +72,7 @@ public class SyncStateRepository {
         Log.debugf("Saving state to: %s", stateFilePath);
 
         try {
-            state.updateLastSyncTime();
+            state.markSynced(Instant.now());
 
             var json = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(state);
 
@@ -83,7 +82,7 @@ public class SyncStateRepository {
             }
 
             Files.writeString(stateFilePath, json);
-            Log.debugf("Saved state: %d issues tracked", state.syncedIssues.size());
+            Log.debugf("Saved state: %d issues tracked", state.trackedIssueCount());
 
         } catch (IOException e) {
             Log.errorf(e, "Failed to save state");
@@ -156,34 +155,13 @@ public class SyncStateRepository {
     }
 
     private SyncState createNewState() {
-        var state = new SyncState();
-        state.lastSyncTime = Instant.now();
-        return state;
+        return new SyncState();
     }
 
     public void validateState(SyncState state) {
         if (state == null) {
             throw new IllegalArgumentException("Sync state cannot be null");
         }
-
-        if (state.syncedIssues == null) {
-            Log.warn("Sync state has null syncedIssues map, initializing empty map");
-            state.syncedIssues = new HashMap<>();
-        }
-
-        if (state.version == null) {
-            Log.warn("Sync state has no version, setting to 1.0");
-            state.version = "1.0";
-        }
-
-        // Validate each synced issue
-        state.syncedIssues.entrySet().removeIf(entry -> {
-            SyncState.SyncedIssue issue = entry.getValue();
-            if (issue.linearIssueId == null || issue.jiraIssueKey == null) {
-                Log.warnf("Removing invalid synced issue entry: %s", entry.getKey());
-                return true;
-            }
-            return false;
-        });
+        state.removeInvalidEntries().forEach(key -> Log.warnf("Removed invalid synced issue entry: %s", key));
     }
 }

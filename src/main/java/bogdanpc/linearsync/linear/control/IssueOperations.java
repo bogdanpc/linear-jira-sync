@@ -1,6 +1,7 @@
 package bogdanpc.linearsync.linear.control;
 
 import bogdanpc.linearsync.linear.entity.LinearIssue;
+import bogdanpc.linearsync.linear.entity.LinearStateType;
 import bogdanpc.linearsync.linear.entity.LinearUser;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -151,11 +152,11 @@ public class IssueOperations {
         this.linearClient = linearClient;
     }
 
-    public List<LinearIssue> getIssues(String teamKey, String stateType, Instant updatedAfter) {
+    public List<LinearIssue> getIssues(String teamKey, LinearStateType stateType, Instant updatedAfter) {
         return fetchIssues(teamKey, stateType, updatedAfter, null);
     }
 
-    public List<LinearIssue> getMyIssues(String teamKey, String stateType, Instant updatedAfter) {
+    public List<LinearIssue> getMyIssues(String teamKey, LinearStateType stateType, Instant updatedAfter) {
         return fetchIssues(teamKey, stateType, updatedAfter, getCurrentUserEmail());
     }
 
@@ -180,7 +181,7 @@ public class IssueOperations {
         return user != null ? user.email() : null;
     }
 
-    private List<LinearIssue> fetchIssues(String teamKey, String stateType, Instant updatedAfter, String assigneeEmail) {
+    private List<LinearIssue> fetchIssues(String teamKey, LinearStateType stateType, Instant updatedAfter, String assigneeEmail) {
         Log.debugf("Fetching issues - team: %s, state: %s, assignee: %s", teamKey, stateType, assigneeEmail);
 
         var allIssues = new ArrayList<LinearIssue>();
@@ -222,15 +223,15 @@ public class IssueOperations {
         return user;
     }
 
-    private Map<String, Object> buildFilter(String teamKey, String stateType, Instant updatedAfter, String assigneeEmail) {
+    private Map<String, Object> buildFilter(String teamKey, LinearStateType stateType, Instant updatedAfter, String assigneeEmail) {
         var filter = new HashMap<String, Object>();
 
         if (teamKey != null && !teamKey.isEmpty()) {
             filter.put("team", Map.of("key", Map.of("eq", teamKey)));
         }
 
-        if (stateType != null && !stateType.isEmpty()) {
-            filter.put("state", Map.of("type", Map.of("eq", stateType)));
+        if (stateType != null) {
+            filter.put("state", Map.of("type", Map.of("eq", stateType.value())));
         }
 
         if (updatedAfter != null) {

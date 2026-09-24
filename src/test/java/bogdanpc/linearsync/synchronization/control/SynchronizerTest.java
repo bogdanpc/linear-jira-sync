@@ -1,11 +1,15 @@
 package bogdanpc.linearsync.synchronization.control;
 
+import bogdanpc.linearsync.synchronization.entity.SyncAction;
+import bogdanpc.linearsync.synchronization.entity.SyncState;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import io.quarkiverse.wiremock.devservice.ConnectWireMock;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.time.Instant;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static org.junit.jupiter.api.Assertions.*;
@@ -20,39 +24,35 @@ class SynchronizerTest {
     @Inject
     SyncStateRepository stateRepository;
 
+    WireMock wiremock;
+
     @BeforeEach
     void setUp() {
-
         if (stateRepository.stateFileExists()) {
             stateRepository.deleteState();
         }
         WireMock.resetAllRequests();
-
-        synchronizer.setDryRun(false);
     }
 
     @Test
     void testSynchronize_Success() {
+        var result = synchronizer.synchronize("ENG", null, null, false, false);
 
-        var result = synchronizer.synchronize("ENG", null, null, false);
-
-        assertTrue(result.success, "Result success should be true");
-        assertEquals(1, result.createdCount);
-        assertEquals(0, result.updatedCount);
-        assertEquals(0, result.skippedCount);
+        assertTrue(result.success(), "Result success should be true");
+        assertEquals(1, result.count(SyncAction.CREATE));
+        assertEquals(0, result.count(SyncAction.UPDATE));
+        assertEquals(0, result.count(SyncAction.SKIP));
 
         verify(postRequestedFor(urlEqualTo("/linear/")));
-
         verify(postRequestedFor(urlEqualTo("/jira/rest/api/3/issue")));
     }
 
     @Test
     void testSynchronizeSingleIssue_Success() {
+        var result = synchronizer.synchronizeSingleIssue("ENG-123", false);
 
-        var result = synchronizer.synchronizeSingleIssue("ENG-123");
-
-        assertTrue(result.success);
-        assertEquals(1, result.createdCount);
+        assertTrue(result.success());
+        assertEquals(1, result.count(SyncAction.CREATE));
 
         verify(postRequestedFor(urlEqualTo("/linear/"))
                 .withRequestBody(containing("GetIssue"))
@@ -64,11 +64,11 @@ class SynchronizerTest {
 
     @Test
     void testSynchronizeSingleIssue_NotFound() {
-        var result = synchronizer.synchronizeSingleIssue("ENG-999");
+        var result = synchronizer.synchronizeSingleIssue("ENG-999", false);
 
-        assertFalse(result.success);
-        assertEquals(0, result.createdCount);
-        assertEquals(1, result.errors.size());
+        assertFalse(result.success());
+        assertEquals(0, result.count(SyncAction.CREATE));
+        assertEquals(1, result.allErrors().size());
 
         verify(postRequestedFor(urlEqualTo("/linear/"))
                 .withRequestBody(containing("GetIssue")));
@@ -77,28 +77,59 @@ class SynchronizerTest {
 
     @Test
     void testSynchronize_DryRun() {
-        synchronizer.setDryRun(true);
+        var result = synchronizer.synchronize("ENG", null, null, false, true);
 
-        var result = synchronizer.synchronize("ENG", null, null, false);
+        assertTrue(result.success());
+        assertEquals(1, result.count(SyncAction.CREATE), "Dry-run counts what would be created");
+        assertEquals(0, result.count(SyncAction.UPDATE));
 
-        assertTrue(result.success);
-        // In dry run, counts reflect what would be created/updated
-        assertEquals(1, result.createdCount);
-        assertEquals(0, result.updatedCount);
-
-        // Verify Linear API was called
         verify(postRequestedFor(urlEqualTo("/linear/")));
-
-        // Verify Jira API was NOT called in dry run (no actual creation)
         verify(0, postRequestedFor(urlEqualTo("/jira/rest/api/3/issue")));
     }
 
     @Test
-    void testSetDryRun() {
-        synchronizer.setDryRun(true);
+    void testSynchronize_UpdatedChildOfSyncedParent() {
+        var state = new SyncState();
+        state.recordSync("parent-1", "TEST-100", "100", Instant.parse("2024-01-01T00:00:00Z"));
+        stateRepository.saveState(state);
 
-        // No API calls needed for this test
-        // Just verify the method works without error
-        assertDoesNotThrow(() -> synchronizer.setDryRun(false));
+        var stub = wiremock.register(post(urlEqualTo("/linear/"))
+                .atPriority(1)
+                .withRequestBody(containing("GetIssues"))
+                .withRequestBody(containing("\"key\":{\"eq\":\"CHILD\"}"))
+                .willReturn(okJson("""
+                        {"data": {"issues": {
+                          "nodes": [{
+                            "id": "issue-child",
+                            "identifier": "ENG-123",
+                            "title": "Test Issue",
+                            "state": {"id": "state-1", "name": "Todo", "type": "unstarted"},
+                            "parent": {"id": "parent-1", "identifier": "ENG-100", "title": "Parent"},
+                            "createdAt": "2024-01-01T10:00:00Z",
+                            "updatedAt": "2024-01-02T10:00:00Z"
+                          }],
+                          "pageInfo": {"hasNextPage": false, "endCursor": null}
+                        }}}
+                        """)));
+
+        var projectStub = wiremock.register(get(urlEqualTo("/jira/rest/api/3/project/TEST"))
+                .willReturn(okJson("""
+                        {"key": "TEST", "issueTypes": [{"id": "1", "name": "Sub-task", "subtask": true}]}
+                        """)));
+
+        try {
+            var result = synchronizer.synchronize("CHILD", null, null, true, false);
+
+            assertTrue(result.success(), () -> String.join("\n", result.allErrors()));
+            assertEquals(1, result.count(SyncAction.CREATE));
+            verify(postRequestedFor(urlEqualTo("/jira/rest/api/3/issue"))
+                    .withRequestBody(matchingJsonPath("$.fields.parent[?(@.key == 'TEST-100')]"))
+                    .withRequestBody(matchingJsonPath("$.fields.issuetype[?(@.name == 'Sub-task')]"))
+                    .withRequestBody(matchingJsonPath("$.fields[?(@.customfield_10000 == 'issue-child')]")));
+            verify(0, postRequestedFor(urlEqualTo("/linear/")).withRequestBody(containing("GetIssue(")));
+        } finally {
+            wiremock.removeStubMapping(stub);
+            wiremock.removeStubMapping(projectStub);
+        }
     }
 }

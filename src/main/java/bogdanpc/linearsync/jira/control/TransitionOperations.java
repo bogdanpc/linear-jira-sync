@@ -1,32 +1,15 @@
 package bogdanpc.linearsync.jira.control;
 
 import bogdanpc.linearsync.jira.entity.JiraTransition;
+import bogdanpc.linearsync.jira.entity.WorkflowStatus;
 import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.rest.client.inject.RestClient;
 
-import java.util.Map;
 import java.util.Optional;
 
 @ApplicationScoped
 public class TransitionOperations {
-
-    private static final String TO_DO = "To Do";
-    private static final String IN_PROGRESS = "In Progress";
-    private static final String DONE = "Done";
-
-    /**
-     * Maps Linear workflow state types to Jira status names.
-     * Linear state types: triage, backlog, unstarted, started, completed, canceled
-     */
-    private static final Map<String, String> STATUS_MAPPING = Map.of(
-            "triage", TO_DO,
-            "backlog", TO_DO,
-            "unstarted", TO_DO,
-            "started", IN_PROGRESS,
-            "completed", DONE,
-            "canceled", DONE
-    );
 
     private final JiraClient jiraClient;
     private final JiraConfig config;
@@ -36,22 +19,18 @@ public class TransitionOperations {
         this.config = config;
     }
 
-    public void transitionIfNeeded(String jiraIssueKey, String linearStateType) {
+    public void transitionIfNeeded(String jiraIssueKey, WorkflowStatus target) {
         if (!config.statusSyncEnabled()) {
             Log.debugf("Status sync disabled, skipping transition for %s", jiraIssueKey);
             return;
         }
 
-        if (linearStateType == null || linearStateType.isBlank()) {
-            Log.debugf("No Linear state type provided for %s, skipping transition", jiraIssueKey);
+        if (target == null) {
+            Log.debugf("No target status for %s, skipping transition", jiraIssueKey);
             return;
         }
 
-        var targetStatus = mapLinearStatusToJira(linearStateType);
-        if (targetStatus == null) {
-            Log.warnf("Unknown Linear state type '%s' for %s, skipping transition", linearStateType, jiraIssueKey);
-            return;
-        }
+        var targetStatus = target.statusName();
 
         try {
             var currentIssue = jiraClient.getIssue(jiraIssueKey);
@@ -73,10 +52,6 @@ public class TransitionOperations {
         } catch (Exception e) {
             Log.errorf(e, "Failed to transition issue %s to status '%s'", jiraIssueKey, targetStatus);
         }
-    }
-
-    private String mapLinearStatusToJira(String linearStateType) {
-        return STATUS_MAPPING.get(linearStateType.toLowerCase());
     }
 
     private Optional<String> findTransitionToStatus(String jiraIssueKey, String targetStatus) {
