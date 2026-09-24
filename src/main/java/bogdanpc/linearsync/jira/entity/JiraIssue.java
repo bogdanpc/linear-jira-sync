@@ -53,6 +53,7 @@ public record JiraIssue(
     @JsonIgnoreProperties(ignoreUnknown = true)
     public record JiraStatusCategory(
             @JsonProperty("id") String id,
+            @JsonProperty("key") String key,
             @JsonProperty("name") String name,
             @JsonProperty("colorName") String colorName
     ) {}

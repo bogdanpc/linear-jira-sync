@@ -67,13 +67,14 @@ public class IssueOperations {
             Log.debugf("Creating subtask with parent: %s, type: %s", issueInput.parentJiraKey(), issueTypeName);
         }
 
+        var labels = issueFieldMapper.labels(issueInput);
         return new JiraCreateRequest(new JiraCreateRequest.Fields(
                 new JiraCreateRequest.Project(projectKey),
                 summary(issueInput),
                 markupFormatter.markdownToAdf(issueInput.description()),
                 new JiraCreateRequest.IssueType(issueTypeName),
                 issueFieldMapper.priority(issueInput),
-                issueFieldMapper.labels(issueInput),
+                labels.isEmpty() ? null : labels,
                 parent,
                 issueFieldMapper.customFields(issueInput)));
     }

@@ -9,6 +9,7 @@
       "name": "To Do",
       "statusCategory": {
         "id": "2",
+        "key": "new",
         "name": "To Do",
         "colorName": "blue-gray"
       }

@@ -6,9 +6,12 @@ import jakarta.enterprise.context.ApplicationScoped;
 
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 @ApplicationScoped
 class IssueFieldMapper {
+
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
 
     private final JiraConfig config;
 
@@ -17,10 +20,15 @@ class IssueFieldMapper {
     }
 
     List<String> labels(JiraIssueInput issueInput) {
-        if (issueInput.labels() == null || issueInput.labels().isEmpty()) {
-            return null;
+        if (issueInput.labels() == null) {
+            return List.of();
         }
-        return issueInput.labels().stream().map(JiraIssueInput.LabelInput::name).toList();
+        return issueInput.labels().stream()
+                .map(JiraIssueInput.LabelInput::name)
+                .filter(name -> name != null && !name.isBlank())
+                .map(name -> WHITESPACE.matcher(name.strip()).replaceAll("_"))
+                .distinct()
+                .toList();
     }
 
     JiraCreateRequest.Priority priority(JiraIssueInput issueInput) {

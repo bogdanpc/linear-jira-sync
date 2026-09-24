@@ -8,6 +8,7 @@
         "name": "In Progress",
         "statusCategory": {
           "id": "4",
+          "key": "indeterminate",
           "name": "In Progress",
           "colorName": "yellow"
         }
@@ -21,6 +22,7 @@
         "name": "Done",
         "statusCategory": {
           "id": "3",
+          "key": "done",
           "name": "Done",
           "colorName": "green"
         }

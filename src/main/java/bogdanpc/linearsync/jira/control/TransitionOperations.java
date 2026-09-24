@@ -30,47 +30,46 @@ public class TransitionOperations {
             return;
         }
 
-        var targetStatus = target.statusName();
-
         try {
-            var currentIssue = jiraClient.getIssue(jiraIssueKey);
-            var currentStatus = currentIssue.fields() != null && currentIssue.fields().status() != null
-                    ? currentIssue.fields().status().name()
-                    : null;
-
-            if (targetStatus.equalsIgnoreCase(currentStatus)) {
-                Log.debugf("Issue %s already in status '%s', no transition needed", jiraIssueKey, currentStatus);
+            var fields = jiraClient.getIssue(jiraIssueKey).fields();
+            var currentStatus = fields != null ? fields.status() : null;
+            if (currentStatus != null && target.belongsTo(currentStatus.statusCategory())) {
+                Log.debugf("Issue %s already in status '%s', no transition needed", jiraIssueKey, currentStatus.name());
                 return;
             }
 
-            var transitionId = findTransitionToStatus(jiraIssueKey, targetStatus);
-            if (transitionId.isPresent()) {
-                performTransition(jiraIssueKey, transitionId.get(), currentStatus, targetStatus);
-            } else {
-                Log.warnf("No transition found to move %s from '%s' to '%s'", jiraIssueKey, currentStatus, targetStatus);
-            }
-        } catch (Exception e) {
-            Log.errorf(e, "Failed to transition issue %s to status '%s'", jiraIssueKey, targetStatus);
+            var currentName = currentStatus != null ? currentStatus.name() : null;
+            findTransition(jiraIssueKey, target).ifPresentOrElse(
+                    transition -> performTransition(jiraIssueKey, transition, currentName),
+                    () -> Log.warnf("No transition found to move %s from '%s' to '%s'", jiraIssueKey, currentName,
+                            target.statusName()));
+        } catch (RuntimeException e) {
+            Log.errorf(e, "Failed to transition issue %s to status '%s'", jiraIssueKey, target.statusName());
         }
     }
 
-    private Optional<String> findTransitionToStatus(String jiraIssueKey, String targetStatus) {
-        var transitionsResponse = jiraClient.getTransitions(jiraIssueKey);
-        if (transitionsResponse.transitions() == null) {
+    /**
+     * Prefers the status named like the target so a workflow with several statuses in one category (e.g. "In Review"
+     * and "In Progress") still lands on the expected one, and falls back to any status of the target's category.
+     */
+    private Optional<JiraTransition> findTransition(String jiraIssueKey, WorkflowStatus target) {
+        var transitions = jiraClient.getTransitions(jiraIssueKey).transitions();
+        if (transitions == null) {
             return Optional.empty();
         }
 
-        return transitionsResponse.transitions().stream()
-                .filter(t -> t.to() != null && targetStatus.equalsIgnoreCase(t.to().name()))
-                .map(JiraTransition::id)
-                .findFirst();
+        var reachable = transitions.stream().filter(t -> t.to() != null).toList();
+        return reachable.stream()
+                .filter(t -> target.statusName().equalsIgnoreCase(t.to().name()))
+                .findFirst()
+                .or(() -> reachable.stream().filter(t -> target.belongsTo(t.to().statusCategory())).findFirst());
     }
 
-    private void performTransition(String jiraIssueKey, String transitionId, String fromStatus, String toStatus) {
+    private void performTransition(String jiraIssueKey, JiraTransition transition, String fromStatus) {
         var request = new JiraTransition.TransitionRequest(
-                new JiraTransition.TransitionRequest.TransitionId(transitionId)
+                new JiraTransition.TransitionRequest.TransitionId(transition.id())
         );
         jiraClient.doTransition(jiraIssueKey, request);
-        Log.infof("Transitioned %s: '%s' → '%s'", jiraIssueKey, fromStatus, toStatus);
+        Log.infof("Transitioned %s: '%s' → '%s'", jiraIssueKey, fromStatus, transition.to().name());
     }
 }
