@@ -19,25 +19,7 @@ public class Application implements QuarkusApplication {
     }
 
     static void main(String... args) {
-        bootstrapConfigLocations(args);
+        BootstrapConfig.apply(args);
         Quarkus.run(Application.class, args);
-    }
-
-    /**
-     * Parses --config from CLI args and sets smallrye.config.locations
-     * before Quarkus initializes, so external config files are available
-     * to the CDI and config subsystems at startup.
-     */
-    static void bootstrapConfigLocations(String[] args) {
-        for (int i = 0; i < args.length; i++) {
-            if ("--config".equals(args[i]) && i + 1 < args.length) {
-                System.setProperty("smallrye.config.locations", args[i + 1]);
-                return;
-            }
-            if (args[i].startsWith("--config=")) {
-                System.setProperty("smallrye.config.locations", args[i].substring("--config=".length()));
-                return;
-            }
-        }
     }
 }

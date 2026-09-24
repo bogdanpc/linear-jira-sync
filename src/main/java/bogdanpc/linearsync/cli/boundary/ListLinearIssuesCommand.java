@@ -44,7 +44,7 @@ public class ListLinearIssuesCommand implements Command<CommandInvocation> {
 
     @Override
     public CommandResult execute(CommandInvocation invocation) {
-        if (output.applyLogLevel()) {
+        if (output.conflicting()) {
             return CommandResult.FAILURE;
         }
 

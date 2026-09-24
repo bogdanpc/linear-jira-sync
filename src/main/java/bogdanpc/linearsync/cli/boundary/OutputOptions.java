@@ -15,20 +15,18 @@ public class OutputOptions {
     @Option(name = "quiet", shortName = 'q', hasValue = false, description = "Suppress non-error output")
     public boolean quiet;
 
-    @SuppressWarnings("unused") // parsed pre-boot in Application.bootstrapConfigLocations; declared here so aesh accepts the flag
+    @SuppressWarnings("unused") // parsed pre-boot in BootstrapConfig; declared here so aesh accepts the option
     @Option(name = "config", description = "Path to external configuration file (e.g., ~/.linear-jira-sync/config.properties)")
     public String configFile;
 
     /**
-     * @return false when the flags contradict each other, after reporting the conflict
+     * The log level itself is applied pre-boot by {@link BootstrapConfig}; this only reports the conflict.
      */
-    boolean applyLogLevel() {
+    boolean conflicting() {
         if (quiet && verbose) {
             Log.error("Error: Cannot use both --quiet and --verbose options");
             return true;
         }
-
-        LoggingConfig.configure(quiet, verbose);
         return false;
     }
 }

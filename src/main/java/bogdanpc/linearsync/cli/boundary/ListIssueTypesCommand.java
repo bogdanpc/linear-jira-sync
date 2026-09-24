@@ -26,7 +26,7 @@ public class ListIssueTypesCommand implements Command<CommandInvocation> {
 
     @Override
     public CommandResult execute(CommandInvocation invocation) {
-        if (output.applyLogLevel() || !ConfigurationCheck.isValid(config)) {
+        if (output.conflicting() || !ConfigurationCheck.isValid(config)) {
             return CommandResult.FAILURE;
         }
 

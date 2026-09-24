@@ -57,20 +57,19 @@ public class SyncCommand implements Command<CommandInvocation> {
     @Option(name = "dry-run", shortName = 'd', hasValue = false, description = "Show what would be done without making actual changes")
     boolean dryRun;
 
+    @SuppressWarnings("unused") // parsed pre-boot in BootstrapConfig; declared here so aesh accepts the option
     @Option(name = "state-dir", description = "Custom directory for state file storage (overrides LINEARSYNC_STORAGE_LOCATION)")
     String stateDirectory;
 
+    @SuppressWarnings("unused") // parsed pre-boot in BootstrapConfig; declared here so aesh accepts the option
     @Option(name = "jira-project-key", description = "Target Jira project key (overrides JIRA_PROJECT_KEY)")
     String jiraProjectKey;
 
     @Override
     public CommandResult execute(CommandInvocation invocation) {
-        if (output.applyLogLevel()) {
+        if (output.conflicting()) {
             return CommandResult.FAILURE;
         }
-
-        overrideProperty("sync.storage.location", stateDirectory);
-        overrideProperty("jira.project.key", jiraProjectKey);
 
         if (!ConfigurationCheck.isValid(config)) {
             return CommandResult.FAILURE;
@@ -97,12 +96,6 @@ public class SyncCommand implements Command<CommandInvocation> {
             Log.error("Error: Synchronization failed - " + e.getMessage());
             Log.debug("Stack trace: " + Arrays.toString(e.getStackTrace()));
             return CommandResult.FAILURE;
-        }
-    }
-
-    private static void overrideProperty(String key, String value) {
-        if (value != null && !value.isBlank()) {
-            System.setProperty(key, value);
         }
     }
 
