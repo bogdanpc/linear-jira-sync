@@ -69,6 +69,10 @@ public class SearchOperations {
         return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
+    /**
+     * Fails instead of returning the comments fetched so far: a comment missing from the list counts as unsynced and
+     * would be posted again.
+     */
     List<JiraComment> getComments(String jiraIssueKey) {
         Log.debugf("Fetching comments for Jira issue: %s", jiraIssueKey);
 
@@ -78,20 +82,14 @@ public class SearchOperations {
         var hasMore = true;
 
         while (hasMore) {
-            try {
-                var response = jiraClient.getComments(jiraIssueKey, startAt, maxResults);
+            var response = jiraClient.getComments(jiraIssueKey, startAt, maxResults);
 
-                if (response.comments() != null) {
-                    allComments.addAll(response.comments());
-                }
-
-                hasMore = response.comments() != null && response.comments().size() == maxResults && startAt + maxResults < response.total();
-                startAt += maxResults;
-
-            } catch (Exception e) {
-                Log.errorf(e, "Failed to fetch comments for Jira issue: %s", jiraIssueKey);
-                break;
+            if (response.comments() != null) {
+                allComments.addAll(response.comments());
             }
+
+            hasMore = response.comments() != null && response.comments().size() == maxResults && startAt + maxResults < response.total();
+            startAt += maxResults;
         }
 
         Log.debugf("Fetched %d comments for Jira issue: %s", allComments.size(), jiraIssueKey);

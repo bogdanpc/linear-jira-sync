@@ -3,6 +3,7 @@ package bogdanpc.linearsync.synchronization.control;
 import bogdanpc.linearsync.linear.control.IssueOperations;
 import bogdanpc.linearsync.linear.entity.LinearIssue;
 import bogdanpc.linearsync.synchronization.entity.IssueResult;
+import bogdanpc.linearsync.synchronization.entity.SyncAction;
 import bogdanpc.linearsync.synchronization.entity.SyncState;
 import io.quarkus.logging.Log;
 
@@ -49,13 +50,25 @@ final class SyncRun {
             return earlier == null ? null : earlier.jiraIssueKey();
         }
 
-        var result = issueSync.sync(issue, parentJiraKey(issue), state, dryRun);
+        var parentKey = parentJiraKey(issue);
+        var result = issue.parent() != null && parentKey == null ? parentNotSynced(issue)
+                : issueSync.sync(issue, parentKey, state, dryRun);
         results.put(issue.id(), result);
 
         if (result.success()) {
             syncChildren(issue);
         }
         return result.jiraIssueKey();
+    }
+
+    private IssueResult parentNotSynced(LinearIssue issue) {
+        var synced = state.syncedIssue(issue.id());
+        var action = synced.isPresent() ? SyncAction.UPDATE : SyncAction.CREATE;
+        var message = "Skipped %s: its parent %s is not in Jira".formatted(issue.identifier(),
+                issue.parent().identifier());
+        Log.errorf("  ✗ %s", message);
+        return IssueResult.failed(issue.identifier(), synced.map(SyncState.SyncedIssue::jiraIssueKey).orElse(null),
+                action, message);
     }
 
     private String parentJiraKey(LinearIssue issue) {

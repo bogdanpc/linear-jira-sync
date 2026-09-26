@@ -10,6 +10,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Optional;
 
@@ -17,6 +18,8 @@ import java.util.Optional;
 public class AttachmentDownloader {
 
     private static final String LINEAR_UPLOAD_HOST = "uploads.linear.app";
+    private static final String TEMP_DIRECTORY_PREFIX = "linear-attachment-";
+    private static final String DEFAULT_FILENAME = "attachment";
 
     private final LinearConfig linearConfig;
     private final AttachmentConfig attachmentConfig;
@@ -64,9 +67,15 @@ public class AttachmentDownloader {
     }
 
     public void cleanupTempFile(File file) {
+        var path = file.toPath().toAbsolutePath().normalize();
+        var directory = path.getParent();
+        if (!isOwnTempDirectory(directory)) {
+            Log.warnf("Refusing to delete %s: not inside an attachment temp directory", file);
+            return;
+        }
         try {
-            Files.deleteIfExists(file.toPath());
-            Files.deleteIfExists(file.toPath().getParent());
+            Files.deleteIfExists(path);
+            Files.deleteIfExists(directory);
         } catch (IOException e) {
             Log.warnf(e, "Failed to delete temporary file %s", file);
         }
@@ -95,10 +104,30 @@ public class AttachmentDownloader {
     }
 
     private static File writeTempFile(String filename, byte[] content) throws IOException {
-        var name = filename == null || filename.isBlank()
-                ? "attachment"
-                : filename.replaceAll("[^a-zA-Z0-9._-]", "_");
-        var file = Files.createTempDirectory("linear-attachment-").resolve(name);
-        return Files.write(file, content).toFile();
+        var directory = Files.createTempDirectory(TEMP_DIRECTORY_PREFIX);
+        try {
+            return Files.write(directory.resolve(safeFilename(filename)), content).toFile();
+        } catch (IOException e) {
+            Files.deleteIfExists(directory);
+            throw e;
+        }
+    }
+
+    // Keeps the Linear title as the Jira attachment name while preventing "." or ".." from resolving outside the temp directory
+    static String safeFilename(String filename) {
+        if (filename == null) {
+            return DEFAULT_FILENAME;
+        }
+        var name = filename.replaceAll("[^a-zA-Z0-9._-]", "_");
+        return name.matches("\\.*") ? DEFAULT_FILENAME : name;
+    }
+
+    private static boolean isOwnTempDirectory(Path directory) {
+        if (directory == null || directory.getFileName() == null) {
+            return false;
+        }
+        var tempRoot = Path.of(System.getProperty("java.io.tmpdir")).toAbsolutePath().normalize();
+        return tempRoot.equals(directory.getParent())
+                && directory.getFileName().toString().startsWith(TEMP_DIRECTORY_PREFIX);
     }
 }

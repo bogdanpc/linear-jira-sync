@@ -1,6 +1,7 @@
 ///usr/bin/env jbang "$0" "$@" ; exit $?
 //JAVA 25+
-//DEPS io.quarkus.platform:quarkus-bom:3.39.3@pom
+//DEPS com.fasterxml.jackson:jackson-bom:2.22.3@pom
+//DEPS io.quarkus.platform:quarkus-bom:3.39.5@pom
 //DEPS io.quarkus:quarkus-aesh
 //DEPS io.quarkus:quarkus-rest-client-jackson
 //DEPS io.quarkus:quarkus-arc
